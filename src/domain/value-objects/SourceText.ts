@@ -129,7 +129,7 @@ export class SourceText {
   public isTranslatable(): boolean {
     if (this.isEmpty) return false;
     if (this.length < SourceText.MIN_LENGTH) return false;
-    if (this.length > SourceText.MAX_LENGTH) return false;
+    if (this.length >= SourceText.MAX_LENGTH) return false;
     if (this.isOnlyNumbers()) return false;
     if (this.isOnlyPunctuation()) return false;
     return true;
@@ -212,8 +212,22 @@ export class SourceText {
       .map(s => s.trim())
       .filter(s => s.length > 0);
 
+    // Add the punctuation back for the last sentence if it was split
+    if (sentences.length > 0 && /[.!?]$/.test(this._content.trim())) {
+      // Last sentence had punctuation that was removed
+      const lastIndex = sentences.length - 1;
+      const lastSentence = sentences[lastIndex];
+      if (lastSentence && !(/[.!?]$/.test(lastSentence))) {
+        // Find what punctuation was at the end
+        const match = this._content.trim().match(/[.!?]+$/);
+        if (match) {
+          sentences[lastIndex] = lastSentence + match[0];
+        }
+      }
+    }
+
     return sentences.map(sentence =>
-      SourceText.create(sentence, {
+      SourceText.create(sentence.replace(/[.!?]+$/, ''), {
         type: this._type,
         preserveFormatting: this._preserveFormatting,
         extractionContext: `${this._extractionContext}-sentence`
@@ -309,13 +323,34 @@ export class SourceText {
     const words = content.match(/\b\w+\b/g) || [];
     const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
 
+    // Reset regex lastIndex to ensure proper testing
+    const codePatterns = [
+      /```[\s\S]*?```/g,           // Code blocks
+      /<code[\s\S]*?<\/code>/gi,   // HTML code tags
+      /\b(function|class|const|let|var|if|else|for|while)\b/g, // JS keywords
+      /\b(SELECT|FROM|WHERE|INSERT|UPDATE|DELETE)\b/gi,        // SQL keywords
+    ];
+
+    const containsCode = codePatterns.some(pattern => {
+      pattern.lastIndex = 0; // Reset regex state
+      return pattern.test(content);
+    });
+
+    const numberPattern = /\b\d+(?:\.\d+)?\b/g;
+    numberPattern.lastIndex = 0; // Reset regex state
+    const containsNumbers = numberPattern.test(content);
+
+    const htmlPattern = /<[^>]*>/g;
+    htmlPattern.lastIndex = 0; // Reset regex state
+    const containsHtml = htmlPattern.test(content);
+
     return {
       wordCount: words.length,
       characterCount: content.length,
       paragraphCount: paragraphs.length,
-      containsCode: SourceText.CODE_PATTERNS.some(pattern => pattern.test(content)),
-      containsNumbers: SourceText.NUMBER_PATTERN.test(content),
-      containsHtml: SourceText.HTML_PATTERN.test(content),
+      containsCode,
+      containsNumbers,
+      containsHtml,
       language: partial?.language,
       encoding: partial?.encoding || 'utf-8',
       ...partial

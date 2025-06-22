@@ -23,3 +23,31 @@ node_modules/
 
 # OS specific
 .DS_Store
+
+# Testing and Coverage
+coverage/
+.nyc_output/
+junit.xml
+.jest/
+
+# Build artifacts
+dist/
+build/tmp/
+*.tsbuildinfo
+*.map
+
+# TDD automation
+.tdd-progress.json
+
+# Claude Code specific
+.claude/settings.local.json
+
+# Browser extension builds
+*.crx
+*.pem
+
+# Safari Xcode files
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+DerivedData/
