@@ -8,7 +8,7 @@
 
 ## 現在の状態
 
-**v0.1.0 MVP 完了** ✅ (2024-12-23)
+**v0.1.0 MVP 完了** ✅ (2025-12-23)
 
 - 英語→日本語翻訳（MyMemory API）
 - バイリンガル表示（原文下に翻訳ボックス）
@@ -16,7 +16,7 @@
 - Unit Tests 35件 + E2E Tests
 - ESLint（手動実行）
 
-**v0.2.0 Claude Code Hooks** ✅ (2024-12-23)
+**v0.2.0 Claude Code Hooks** ✅ (2025-12-23)
 
 - PostToolUse: ESLint自動実行（Edit/Write後）
 - PreToolUse: ファイル保護（package-lock.json, .env, dist/）
