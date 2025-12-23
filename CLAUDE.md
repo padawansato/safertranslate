@@ -12,6 +12,13 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 - `npm run test:run` - Unit tests (single run)
 - `npm run test:e2e` - E2E tests
 - `npm run typecheck` - 型チェック
+- `npm run lint` - ESLint実行（手動）
+
+## Lint
+
+- ESLint 9.x + typescript-eslint（flat config）
+- **現在**: 手動実行 `npm run lint`
+- **v0.2.0予定**: Claude Code hooks で PostToolUse 自動実行
 
 ## コード規約
 
