@@ -1,0 +1,33 @@
+/**
+ * SaferTranslate - Translation box styles
+ */
+
+.safertranslate-box {
+  display: block;
+  margin: 8px 0;
+  padding: 12px 16px;
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 0.95em;
+  line-height: 1.6;
+  color: #333333;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.safertranslate-box:hover {
+  border-color: #4A90D9;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .safertranslate-box {
+    background-color: #2d2d2d;
+    border-color: #444444;
+    color: #e0e0e0;
+  }
+
+  .safertranslate-box:hover {
+    border-color: #6ba3e0;
+  }
+}
