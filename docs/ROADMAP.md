@@ -16,6 +16,11 @@
 - Unit Tests 35件 + E2E Tests
 - ESLint（手動実行）
 
+**v0.2.0 Claude Code Hooks** ✅ (2024-12-23)
+
+- PostToolUse: ESLint自動実行（Edit/Write後）
+- PreToolUse: ファイル保護（package-lock.json, .env, dist/）
+
 ---
 
 ## Phase 1: 地盤固め（テストで機能を保護しながら）
@@ -41,7 +46,7 @@
 **ディレクトリ構造**:
 ```
 .claude/
-├── settings.json      # hooks設定（v0.2.0で追加予定）
+├── settings.json      # hooks設定 ✅ 完了
 ├── commands/          # カスタムコマンド
 │   └── review.md      # /review - コードレビュー実行
 ├── agents/            # 役割別subagent定義
@@ -51,7 +56,9 @@
     └── src.md         # src/配下のルール
 ```
 
-**役割定義**:
+**役割定義の例**:
+
+こうしなければいけないわけではない。
 
 | 役割 | 責務 | ツール制限 |
 |------|------|-----------|

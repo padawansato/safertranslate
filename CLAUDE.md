@@ -17,8 +17,17 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 ## Lint
 
 - ESLint 9.x + typescript-eslint（flat config）
-- **現在**: 手動実行 `npm run lint`
-- **v0.2.0予定**: Claude Code hooks で PostToolUse 自動実行
+- **手動実行**: `npm run lint`
+- **自動実行**: Claude Code hooks (PostToolUse) で Edit/Write 後に自動実行
+
+## Claude Code Hooks
+
+`.claude/settings.json` に設定済み:
+
+| Hook | トリガー | 動作 |
+|------|----------|------|
+| PostToolUse | Edit/Write後 | `.ts/.tsx/.js/.jsx` に ESLint --fix 自動実行 |
+| PreToolUse | Edit/Write前 | `package-lock.json`, `.env`, `dist/` への書き込みブロック |
 
 ## コード規約
 

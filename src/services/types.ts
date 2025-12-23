@@ -1,5 +1,5 @@
 /**
- * Translation service types
+ * Translation service types for SaferTranslate
  */
 
 export interface TranslationRequest {
