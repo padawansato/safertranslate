@@ -121,6 +121,17 @@
 
 ---
 
+## Phase 4: Safari拡張機能対応
+
+詳細は下部「技術検討: Safari拡張機能対応（個人利用）」を参照。
+
+- [ ] `webextension-polyfill` 追加
+- [ ] `safari-web-extension-converter` でXcodeプロジェクト変換
+- [ ] Safari実機テスト（主要サイトでの動作確認）
+- [ ] Safari向けセットアップ手順をREADMEに追記
+
+---
+
 ## 原則
 
 1. **テストが通る状態を維持** - リファクタリング中も `npm run test:run` がパスすること
