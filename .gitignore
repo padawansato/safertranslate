@@ -34,6 +34,7 @@ test-results/
 
 # Build artifacts
 dist/
+*.zip
 build/tmp/
 *.tsbuildinfo
 *.map
