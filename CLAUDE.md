@@ -4,6 +4,10 @@
 
 Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 
+## ディレクトリ構成
+
+- `ROADMAP.md` - 開発ロードマップ
+
 ## コマンド
 
 - `npm run dev` - 開発ビルド（watch）
@@ -70,6 +74,8 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 
 ## 翻訳API
 
+### テスト用
+
 - MyMemory: `https://api.mymemory.translated.net/get?q={text}&langpair=en|ja`
 - 無料、APIキー不要
 - レート制限: 1000語/日（匿名）
@@ -78,16 +84,14 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 
 - MVP期: main直接開発
 - タグ: セマンティックバージョニング (v0.1.0, v0.2.0...)
-- MVP完了後: develop worktree運用へ移行
-
-## Reference
-
-See `docs/wireframe/` for visual examples of the target bilingual display behavior.
+- MVP完了後: git worktree運用へ移行
 
 ## Voice Notification
 
-タスクの進捗状況の報告を日本語で要約を読み上げる。
+常にタスクの進捗状況の報告を
 
+- 内容: 基本はタスクの進捗状況の報告。それ以外は技術的な解説をする。
 - When: 1つのIssue50%・100%完了時、問題発生時、計画変更時、質問時
 - ツール: `mcp__voicevox__speak` または `say` コマンド
-- 設定: `speaker=1, speedScale=1.5`
+- voicevox設定: `speaker=3, speedScale=1.5`
+- claude設定: subagent/backgroundで実行

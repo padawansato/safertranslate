@@ -150,6 +150,79 @@
 
 ---
 
+---
+
+## 技術検討: Safari拡張機能対応（個人利用）
+
+### 概要
+
+SaferTranslateをSafariブラウザ拡張機能として個人利用する場合の技術検討。
+App Store申請は行わず、ローカル開発ビルドとして使用する。
+
+### 互換性評価
+
+| 使用API | Safari互換性 |
+|---------|-------------|
+| `chrome.runtime.onMessage` | ✅ |
+| `chrome.tabs.query` | ✅ |
+| `chrome.tabs.sendMessage` | ✅ |
+| Manifest V3 Service Worker | ✅ (Safari 16.4+) |
+
+**結論**: 現在のコードベースはSafari Web Extensionと高い互換性あり。
+
+### 必要な作業
+
+| 項目 | 工数 | 備考 |
+|------|------|------|
+| Xcodeプロジェクト変換 | 0.5日 | `safari-web-extension-converter` |
+| polyfill追加 | 0.5日 | `webextension-polyfill` |
+| Safari実機テスト | 1日 | 主要サイトでの動作確認 |
+| **合計** | **2日** | |
+
+### セットアップ手順（個人利用）
+
+```bash
+# 1. 拡張機能をビルド
+npm run build
+
+# 2. Xcodeプロジェクトに変換
+xcrun safari-web-extension-converter ./dist \
+  --project-location ./safari-extension \
+  --app-name "SaferTranslate"
+
+# 3. Xcodeでビルド
+open ./safari-extension/SaferTranslate.xcodeproj
+# Xcode: Product → Build
+
+# 4. Safariで有効化
+# Safari → 設定 → 詳細 → 「開発メニューを表示」
+# 開発メニュー → 「署名されていない拡張機能を許可」
+# Safari → 設定 → 拡張機能 → SaferTranslate を有効化
+```
+
+### コスト
+
+| 項目 | 費用 |
+|------|------|
+| Apple Developer Program | **不要**（個人利用） |
+| Xcode | 無料 |
+
+### 制限事項
+
+- Safariを再起動するたびに「署名されていない拡張機能を許可」の再有効化が必要
+- 他のMacへの配布不可
+
+### 難易度
+
+| 観点 | 評価 |
+|------|------|
+| 技術的難易度 | **低** |
+| 工数 | **2日程度** |
+| 前提条件 | macOS + Xcode |
+
+---
+
 ## 参考
 
 - [Claude Code ゲームアナロジー](https://zenn.dev/yahsan2/articles/claude-code-game-analogy)
+- [Safari Web Extensions | Apple Developer](https://developer.apple.com/documentation/safariservices/safari_web_extensions)

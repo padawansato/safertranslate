@@ -106,7 +106,7 @@ npm run typecheck   # 型チェックのみ
 - Vitest (Unit Tests)
 - Playwright (E2E Tests)
 
-## 展望(今はやらない)
+## Future Plans
 
 - 翻訳サービスの選択
 - 埋め込みデザインの選択
