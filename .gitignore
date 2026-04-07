@@ -51,7 +51,9 @@ build/tmp/
 *.crx
 *.pem
 
-# Safari Xcode files
+# Safari build & Xcode project
+dist-safari/
+safari-extension/
 *.xcuserstate
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/

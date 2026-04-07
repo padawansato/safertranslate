@@ -16,6 +16,7 @@ export default defineConfig({
     headless: false, // Extensions require headed mode
     viewport: { width: 1280, height: 720 },
     trace: 'on-first-retry',
+    video: 'retain-on-failure',
   },
 
   projects: [
