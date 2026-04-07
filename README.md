@@ -1,15 +1,8 @@
 # SaferTranslate
 
-[immersivetranslate.com](https://immersivetranslate.com)の翻訳と翻訳後テキストの埋め込み表示機能のみを再現したTinyなChrome翻訳拡張機能MVP
+バイリンガル表示に対応したシンプルなChrome翻訳拡張機能
 
-## イメージ
-
-immersivetranslate.comの例：
-
-![翻訳前](docs/wireframe/翻訳前.png)
-![翻訳後](docs/wireframe/翻訳後.png)
-
-白い枠と翻訳後テキストが1文ずつ挿入されている。
+> Inspired by [immersivetranslate.com](https://immersivetranslate.com)
 
 ## Key Features
 
@@ -119,6 +112,6 @@ npm run typecheck   # 型チェックのみ
 - 埋め込みデザインの選択
 - ショートカットキー対応
 
-## 参考
+## License
 
-https://chromewebstore.google.com
+MIT License - see [LICENSE](LICENSE) for details.
