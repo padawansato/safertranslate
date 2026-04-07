@@ -7,12 +7,13 @@ import type { ExtensionMessage } from '@/services/types';
 import { translate } from '@/services/translator';
 import { extractTranslatableElements } from './textExtractor';
 import { injectTranslation, removeAllTranslations, hasTranslations } from './domInjector';
+import { runtime } from '@/lib/browser';
 import './styles.css';
 
 /**
  * Listen for messages from popup/background
  */
-chrome.runtime.onMessage.addListener(
+runtime.onMessage.addListener(
   (message: ExtensionMessage, _sender, sendResponse) => {
     if (message.type === 'TRANSLATE_PAGE') {
       handleTranslatePage()
@@ -21,7 +22,7 @@ chrome.runtime.onMessage.addListener(
           console.error('[SaferTranslate] Translation error:', error);
           sendResponse({ success: false, error: String(error) });
         });
-      return true; // Keep channel open for async response
+      return true; // Keep channel open for async sendResponse
     }
     return false;
   }

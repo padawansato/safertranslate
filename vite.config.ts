@@ -1,18 +1,13 @@
-import { defineConfig } from 'vite';
+import { defineConfig, mergeConfig } from 'vite';
 import { crx } from '@crxjs/vite-plugin';
-import { resolve } from 'path';
 import manifest from './src/manifest.json';
+import { sharedConfig } from './vite.config.shared';
 
-export default defineConfig({
-  plugins: [
-    crx({ manifest }),
-  ],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
+export default defineConfig(
+  mergeConfig(sharedConfig, {
+    plugins: [crx({ manifest })],
+    build: {
+      outDir: 'dist',
     },
-  },
-  build: {
-    outDir: 'dist',
-  },
-});
+  }),
+);

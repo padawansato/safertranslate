@@ -4,6 +4,10 @@
  */
 
 import type { TranslatePageMessage } from '@/services/types';
+import { tabs } from '@/lib/browser';
+import { initBuildInfo } from './buildInfo';
+
+initBuildInfo();
 
 const translateBtn = document.getElementById('translate-btn') as HTMLButtonElement;
 const statusDiv = document.getElementById('status') as HTMLDivElement;
@@ -15,8 +19,8 @@ translateBtn.addEventListener('click', async () => {
     statusDiv.className = 'status loading';
 
     // Get active tab
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs[0];
+    const activeTabs = await tabs.query({ active: true, currentWindow: true });
+    const tab = activeTabs[0];
 
     if (!tab?.id) {
       throw new Error('タブが見つかりません');
@@ -24,7 +28,8 @@ translateBtn.addEventListener('click', async () => {
 
     // Send message to content script
     const message: TranslatePageMessage = { type: 'TRANSLATE_PAGE' };
-    const response = await chrome.tabs.sendMessage(tab.id, message);
+    const response = await tabs.sendMessage(tab.id, message)
+      ?? { success: false, error: 'Content scriptから応答がありません' };
 
     if (response.success) {
       statusDiv.textContent = '翻訳完了!';

@@ -3,13 +3,15 @@
  * Handles extension lifecycle and message routing
  */
 
+import { runtime } from '@/lib/browser';
+
 // Extension installed/updated
-chrome.runtime.onInstalled.addListener((details) => {
+runtime.onInstalled.addListener((details) => {
   console.log('[SaferTranslate] Extension installed:', details.reason);
 });
 
 // Message relay (if needed for cross-context communication)
-chrome.runtime.onMessage.addListener((message, sender, _sendResponse) => {
+runtime.onMessage.addListener((message, sender, _sendResponse) => {
   console.log('[SaferTranslate] Background received message:', message, 'from:', sender);
 
   // For now, just pass through - direct popup->content communication works

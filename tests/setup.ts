@@ -18,8 +18,10 @@ const chromeMock = {
   },
 };
 
-// @ts-expect-error - Mocking global chrome object
+// @ts-expect-error - Mocking global chrome/browser objects
 globalThis.chrome = chromeMock;
+// @ts-expect-error - Safari uses browser.* namespace
+globalThis.browser = chromeMock;
 
 // Export for use in tests
 export { chromeMock };
