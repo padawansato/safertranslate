@@ -20,7 +20,8 @@
     "build:safari": "vite build --config vite.config.safari.ts && vite build --config vite.config.safari-content.ts && node scripts/prepare-safari.mjs",
     "build:all": "npm run build && npm run build:safari",
     "safari:convert": "xcrun safari-web-extension-converter ./dist-safari --project-location ./safari-extension --app-name SaferTranslate --bundle-identifier com.padawansato.SaferTranslate --no-prompt --macos-only",
-    "safari:build": "xcodebuild -project ./safari-extension/SaferTranslate/SaferTranslate.xcodeproj -scheme SaferTranslate -configuration Debug build"
+    "safari:build": "xcodebuild -project ./safari-extension/SaferTranslate/SaferTranslate.xcodeproj -scheme SaferTranslate -configuration Debug build",
+    "test:visual:update": "docker run --rm -v $(pwd):/work -w /work mcr.microsoft.com/playwright:v1.57.0-noble bash -c 'npm ci && npm run build && xvfb-run npx playwright test tests/e2e/visual.test.ts --update-snapshots'"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",

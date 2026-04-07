@@ -56,37 +56,8 @@ jobs:
           name: dist-chrome
           path: dist/
       - run: npx playwright install --with-deps chromium
-
-      - name: Run functional E2E tests
-        run: xvfb-run npx playwright test tests/e2e/extension.test.ts
-
-      - name: Check Linux baselines exist
-        id: baselines
-        run: |
-          if [ -f tests/e2e/visual.test.ts-snapshots/popup-initial-chromium-linux.png ]; then
-            echo "exist=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exist=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run visual regression tests
-        if: steps.baselines.outputs.exist == 'true'
-        run: xvfb-run npx playwright test tests/e2e/visual.test.ts
-
-      - name: Generate Linux baselines (first run)
-        if: steps.baselines.outputs.exist == 'false'
-        run: |
-          echo "::warning::Linux baselines not found. Generating initial baselines."
-          xvfb-run npx playwright test tests/e2e/visual.test.ts --update-snapshots || true
-
-      - name: Upload visual baselines for commit
-        if: steps.baselines.outputs.exist == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-baselines
-          path: tests/e2e/visual.test.ts-snapshots/*-linux.png
-          retention-days: 30
-
+      - name: Run E2E tests
+        run: xvfb-run npx playwright test
       - uses: actions/upload-artifact@v4
         if: always()
         with:
