@@ -1,14 +1,54 @@
 /**
- * Translator Service Tests
+ * Translator Router Tests
+ * Tests that the router dispatches to the correct provider based on settings
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { translate, translateBatch } from '@/services/translator';
 
-describe('translator', () => {
+// Mock settings before importing translator
+vi.mock('@/services/settings', () => ({
+  getProvider: vi.fn().mockResolvedValue('mymemory'),
+}));
+
+vi.mock('@/services/providers/mymemory', () => ({
+  myMemoryProvider: {
+    name: 'mymemory',
+    translate: vi.fn().mockResolvedValue({
+      translatedText: 'MyMemory翻訳',
+      sourceText: 'Hello',
+    }),
+    isAvailable: vi.fn().mockResolvedValue(true),
+  },
+}));
+
+vi.mock('@/services/providers/local-llm', () => ({
+  localLlmProvider: {
+    name: 'local-llm',
+    translate: vi.fn().mockResolvedValue({
+      translatedText: 'LLM翻訳',
+      sourceText: 'Hello',
+    }),
+    isAvailable: vi.fn().mockResolvedValue(true),
+  },
+}));
+
+import { translate, translateBatch } from '@/services/translator';
+import { getProvider } from '@/services/settings';
+import { myMemoryProvider } from '@/services/providers/mymemory';
+import { localLlmProvider } from '@/services/providers/local-llm';
+
+describe('translator router', () => {
   beforeEach(() => {
-    // Reset fetch mock before each test
     vi.resetAllMocks();
+    vi.mocked(getProvider).mockResolvedValue('mymemory');
+    vi.mocked(myMemoryProvider.translate).mockResolvedValue({
+      translatedText: 'MyMemory翻訳',
+      sourceText: 'Hello',
+    });
+    vi.mocked(localLlmProvider.translate).mockResolvedValue({
+      translatedText: 'LLM翻訳',
+      sourceText: 'Hello',
+    });
   });
 
   afterEach(() => {
@@ -16,190 +56,63 @@ describe('translator', () => {
   });
 
   describe('translate', () => {
-    it('should translate text successfully', async () => {
-      const mockResponse = {
-        responseData: {
-          translatedText: 'こんにちは',
-          match: 1,
-        },
-        responseStatus: 200,
-      };
+    it('should dispatch to mymemory provider by default', async () => {
+      const result = await translate('Hello');
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      expect(getProvider).toHaveBeenCalledOnce();
+      expect(myMemoryProvider.translate).toHaveBeenCalledWith('Hello', undefined);
+      expect(result.translatedText).toBe('MyMemory翻訳');
+    });
+
+    it('should dispatch to local-llm provider when configured', async () => {
+      vi.mocked(getProvider).mockResolvedValue('local-llm');
 
       const result = await translate('Hello');
 
-      expect(result).toEqual({
-        translatedText: 'こんにちは',
-        sourceText: 'Hello',
-      });
-
-      expect(fetch).toHaveBeenCalledOnce();
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('api.mymemory.translated.net')
-      );
+      expect(localLlmProvider.translate).toHaveBeenCalledWith('Hello', undefined);
+      expect(result.translatedText).toBe('LLM翻訳');
     });
 
-    it('should return empty string for empty input', async () => {
-      const result = await translate('');
+    it('should pass options to provider', async () => {
+      const options = { sourceLang: 'en', targetLang: 'fr' };
+      await translate('Hello', options);
 
-      expect(result).toEqual({
-        translatedText: '',
-        sourceText: '',
-      });
-
-      expect(fetch).not.toHaveBeenCalled();
-    });
-
-    it('should return empty string for whitespace-only input', async () => {
-      const result = await translate('   ');
-
-      expect(result).toEqual({
-        translatedText: '',
-        sourceText: '   ',
-      });
-
-      expect(fetch).not.toHaveBeenCalled();
-    });
-
-    it('should use custom language pair', async () => {
-      const mockResponse = {
-        responseData: {
-          translatedText: 'Bonjour',
-          match: 1,
-        },
-        responseStatus: 200,
-      };
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      await translate('Hello', { sourceLang: 'en', targetLang: 'fr' });
-
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('langpair=en%7Cfr')
-      );
-    });
-
-    it('should throw error when quota is exceeded', async () => {
-      const mockResponse = {
-        responseData: {
-          translatedText: '',
-          match: 0,
-        },
-        quotaFinished: true,
-        responseStatus: 200,
-      };
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      await expect(translate('Hello')).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-      });
-    });
-
-    it('should throw error for HTTP errors', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
-
-      await expect(translate('Hello')).rejects.toMatchObject({
-        code: 'API_ERROR',
-        message: expect.stringContaining('500'),
-      });
-    });
-
-    it('should throw error for network failures', async () => {
-      global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
-
-      await expect(translate('Hello')).rejects.toMatchObject({
-        code: 'NETWORK_ERROR',
-        message: 'Network error',
-      });
-    });
-
-    it('should throw error for API error response', async () => {
-      const mockResponse = {
-        responseData: {
-          translatedText: '',
-          match: 0,
-        },
-        responseStatus: 403,
-        responseDetails: 'Invalid language pair',
-      };
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      await expect(translate('Hello')).rejects.toMatchObject({
-        code: 'API_ERROR',
-        message: 'Invalid language pair',
-      });
+      expect(myMemoryProvider.translate).toHaveBeenCalledWith('Hello', options);
     });
   });
 
   describe('translateBatch', () => {
-    it('should translate multiple texts', async () => {
-      const mockResponses = [
-        { responseData: { translatedText: 'こんにちは', match: 1 }, responseStatus: 200 },
-        { responseData: { translatedText: '世界', match: 1 }, responseStatus: 200 },
-      ];
-
-      let callCount = 0;
-      global.fetch = vi.fn().mockImplementation(() => {
-        const response = mockResponses[callCount];
-        callCount++;
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(response),
-        });
-      });
+    it('should translate multiple texts with the configured provider', async () => {
+      vi.mocked(myMemoryProvider.translate)
+        .mockResolvedValueOnce({ translatedText: 'こんにちは', sourceText: 'Hello' })
+        .mockResolvedValueOnce({ translatedText: '世界', sourceText: 'World' });
 
       const results = await translateBatch(['Hello', 'World']);
 
       expect(results).toHaveLength(2);
       expect(results[0]?.translatedText).toBe('こんにちは');
       expect(results[1]?.translatedText).toBe('世界');
-      expect(fetch).toHaveBeenCalledTimes(2);
+      // getProvider should be called only once for the batch
+      expect(getProvider).toHaveBeenCalledOnce();
     });
 
     it('should handle empty array', async () => {
       const results = await translateBatch([]);
 
       expect(results).toHaveLength(0);
-      expect(fetch).not.toHaveBeenCalled();
     });
 
-    it('should skip empty strings in batch', async () => {
-      const mockResponse = {
-        responseData: { translatedText: 'こんにちは', match: 1 },
-        responseStatus: 200,
-      };
+    it('should use local-llm provider for batch when configured', async () => {
+      vi.mocked(getProvider).mockResolvedValue('local-llm');
+      vi.mocked(localLlmProvider.translate)
+        .mockResolvedValueOnce({ translatedText: 'LLM1', sourceText: 'Hello' })
+        .mockResolvedValueOnce({ translatedText: 'LLM2', sourceText: 'World' });
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      const results = await translateBatch(['Hello', 'World']);
 
-      const results = await translateBatch(['Hello', '', 'World']);
-
-      expect(results).toHaveLength(3);
-      expect(results[0]?.translatedText).toBe('こんにちは');
-      expect(results[1]?.translatedText).toBe('');
-      expect(results[2]?.translatedText).toBe('こんにちは');
-      expect(fetch).toHaveBeenCalledTimes(2); // Empty string doesn't call API
+      expect(results).toHaveLength(2);
+      expect(localLlmProvider.translate).toHaveBeenCalledTimes(2);
+      expect(myMemoryProvider.translate).not.toHaveBeenCalled();
     });
   });
 });

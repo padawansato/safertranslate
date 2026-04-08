@@ -11,10 +11,30 @@ const chromeMock = {
       addListener: vi.fn(),
       removeListener: vi.fn(),
     },
+    onInstalled: {
+      addListener: vi.fn(),
+    },
+    getContexts: vi.fn().mockResolvedValue([]),
+    getURL: vi.fn((path: string) => `chrome-extension://mock-id/${path}`),
+    ContextType: {
+      OFFSCREEN_DOCUMENT: 'OFFSCREEN_DOCUMENT',
+    },
   },
   tabs: {
     query: vi.fn(),
     sendMessage: vi.fn(),
+  },
+  storage: {
+    local: {
+      get: vi.fn().mockResolvedValue({}),
+      set: vi.fn().mockResolvedValue(undefined),
+    },
+  },
+  offscreen: {
+    createDocument: vi.fn().mockResolvedValue(undefined),
+    Reason: {
+      WORKERS: 'WORKERS',
+    },
   },
 };
 

@@ -10,10 +10,21 @@
   <div class="popup-container">
     <h1 class="popup-title">SaferTranslate</h1>
     <p class="popup-description">英語→日本語 バイリンガル翻訳</p>
+    <div class="provider-selector">
+      <label for="provider-select">翻訳エンジン:</label>
+      <select id="provider-select">
+        <option value="mymemory">MyMemory API</option>
+        <option value="local-llm">ローカルLLM</option>
+      </select>
+    </div>
     <button id="translate-btn" class="translate-button">
       このページを翻訳
     </button>
     <div id="status" class="status"></div>
+    <details id="debug-panel" class="debug-panel">
+      <summary>Debug Log</summary>
+      <div id="debug-log" class="debug-log"></div>
+    </details>
     <div id="build-info" class="build-info"></div>
   </div>
   <script type="module" src="./index.ts"></script>
