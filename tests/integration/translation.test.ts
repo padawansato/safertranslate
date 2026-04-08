@@ -11,6 +11,7 @@ import { MODEL_ID } from '@/services/inference-engine';
 describe.skipIf(process.env.CI === 'true')('real model translation', () => {
   it('should translate English to Japanese using actual model', async () => {
     const translator = await pipeline('translation', MODEL_ID);
+    // @ts-expect-error -- v3 types don't include src_lang/tgt_lang but m2m100 supports them at runtime
     const result = await translator('Hello', { src_lang: 'en', tgt_lang: 'ja' });
     const text = (result as Array<{ translation_text: string }>)[0]?.translation_text ?? '';
 

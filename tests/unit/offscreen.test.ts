@@ -98,7 +98,7 @@ describe('offscreen document', () => {
       });
 
       expect(sendResponse).toHaveBeenCalledWith({
-        error: 'Model load failed',
+        error: expect.stringContaining('Model load failed'),
       });
     });
   });

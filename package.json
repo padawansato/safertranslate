@@ -43,6 +43,6 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.0.1"
+    "@huggingface/transformers": "^3.8.1"
   }
 }

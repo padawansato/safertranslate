@@ -9,8 +9,8 @@ if (typeof window === 'undefined' && typeof globalThis !== 'undefined') {
   (globalThis as unknown as Record<string, unknown>).window = globalThis;
 }
 
-// Only import the TYPE (erased at runtime, no hoisting issue)
-import type { TranslationPipeline } from '@huggingface/transformers';
+// v3 types: use generic function type to avoid complex union issues
+type TranslationPipelineFn = (text: string, options?: Record<string, unknown>) => Promise<Array<{ translation_text: string }>>;
 
 export const MODEL_ID = 'Xenova/m2m100_418M';
 
@@ -20,8 +20,8 @@ export type StatusChangeCallback = (
   progress?: { file: string; progress: number },
 ) => void;
 
-let translationPipeline: TranslationPipeline | null = null;
-let loadingPromise: Promise<TranslationPipeline> | null = null;
+let translationPipeline: TranslationPipelineFn | null = null;
+let loadingPromise: Promise<TranslationPipelineFn> | null = null;
 let onStatusChange: StatusChangeCallback | undefined;
 let wasmConfigured = false;
 
@@ -29,7 +29,7 @@ export function initInferenceEngine(callback?: StatusChangeCallback): void {
   onStatusChange = callback;
 }
 
-async function loadPipeline(): Promise<TranslationPipeline> {
+async function loadPipeline(): Promise<TranslationPipelineFn> {
   const { pipeline, env } = await import('@huggingface/transformers');
 
   if (!wasmConfigured && env.backends.onnx.wasm) {
@@ -38,16 +38,18 @@ async function loadPipeline(): Promise<TranslationPipeline> {
     wasmConfigured = true;
   }
 
-  return pipeline('translation', MODEL_ID, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pipe = await (pipeline as any)('translation', MODEL_ID, {
     progress_callback: (event: { status: string; file?: string; progress?: number }) => {
       if (event.status === 'progress' && event.file && event.progress !== undefined) {
         onStatusChange?.('loading', undefined, { file: event.file, progress: event.progress });
       }
     },
-  }) as Promise<TranslationPipeline>;
+  });
+  return pipe as TranslationPipelineFn;
 }
 
-export async function getOrCreatePipeline(): Promise<TranslationPipeline> {
+export async function getOrCreatePipeline(): Promise<TranslationPipelineFn> {
   if (translationPipeline) return translationPipeline;
   if (loadingPromise) return loadingPromise;
 
