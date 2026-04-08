@@ -18,7 +18,9 @@
   },
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage",
+    "offscreen"
   ],
   "background": {
     "service_worker": "src/background/index.ts",

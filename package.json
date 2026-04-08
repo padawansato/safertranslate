@@ -11,7 +11,8 @@
   },
   "scripts": {
     "dev": "vite build --watch --mode development",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --config vite.config.offscreen.ts",
+    "build:chrome": "tsc --noEmit && vite build && vite build --config vite.config.offscreen.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:e2e": "playwright test",
@@ -40,5 +41,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.0.1"
   }
 }

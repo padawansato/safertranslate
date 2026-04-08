@@ -13,3 +13,5 @@ const api = globalThis.browser ?? globalThis.chrome;
 
 export const runtime = api.runtime;
 export const tabs = api.tabs;
+export const storage = api.storage;
+export const offscreen = (api as typeof chrome).offscreen;
