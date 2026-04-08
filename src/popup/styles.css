@@ -95,6 +95,38 @@ body {
   color: #c62828;
 }
 
+.debug-panel {
+  margin-top: 12px;
+  text-align: left;
+  font-size: 10px;
+  color: #888;
+}
+
+.debug-panel summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.debug-log {
+  margin-top: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.debug-log .log-error { color: #f48771; }
+.debug-log .log-warn { color: #cca700; }
+.debug-log .log-info { color: #75beff; }
+.debug-log .log-time { color: #666; }
+
 .build-info {
   margin-top: 12px;
   font-size: 10px;

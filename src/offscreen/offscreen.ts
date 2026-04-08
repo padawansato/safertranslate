@@ -15,7 +15,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'OFFSCREEN_TRANSLATE') {
     handleTranslate(message.text)
       .then((translatedText) => sendResponse({ translatedText, sourceText: message.text }))
-      .catch((err) => sendResponse({ error: err instanceof Error ? err.message : String(err) }));
+      .catch((err) => {
+        const fullError = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : String(err);
+        console.error('[SaferTranslate:Offscreen] Full error:', fullError);
+        sendResponse({ error: fullError });
+      });
     return true;
   }
 

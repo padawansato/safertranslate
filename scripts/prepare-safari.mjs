@@ -41,7 +41,7 @@ rmSync(resolve(dist, 'src'), { recursive: true });
 const wasmDir = resolve(dist, 'wasm');
 mkdirSync(wasmDir, { recursive: true });
 const onnxDir = resolve(root, 'node_modules/onnxruntime-web/dist');
-const wasmFiles = readdirSync(onnxDir).filter(f => f.endsWith('.wasm'));
+const wasmFiles = readdirSync(onnxDir).filter(f => f.endsWith('.wasm') || f.endsWith('.mjs'));
 for (const file of wasmFiles) {
   copyFileSync(resolve(onnxDir, file), resolve(wasmDir, file));
 }

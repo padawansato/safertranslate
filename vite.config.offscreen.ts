@@ -13,7 +13,7 @@ function wasmCopyPlugin(): Plugin {
     generateBundle() {
       const onnxDir = resolve(__dirname, 'node_modules/onnxruntime-web/dist');
       try {
-        const wasmFiles = readdirSync(onnxDir).filter((f) => f.endsWith('.wasm'));
+        const wasmFiles = readdirSync(onnxDir).filter((f) => f.endsWith('.wasm') || f.endsWith('.mjs'));
         for (const file of wasmFiles) {
           this.emitFile({
             type: 'asset',

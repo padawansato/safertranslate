@@ -22,13 +22,31 @@ initBuildInfo();
 const translateBtn = document.getElementById('translate-btn') as HTMLButtonElement;
 const statusDiv = document.getElementById('status') as HTMLDivElement;
 const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
+const debugLog = document.getElementById('debug-log') as HTMLDivElement;
 
-// Load current provider setting and check local-llm availability
+function log(level: 'info' | 'warn' | 'error', msg: string): void {
+  const now = new Date();
+  const time = `${now.toLocaleTimeString('ja-JP', { hour12: false })}.${String(now.getMilliseconds()).slice(0, 1)}`;
+  const line = document.createElement('div');
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'log-time';
+  timeSpan.textContent = `${time} `;
+  const msgSpan = document.createElement('span');
+  msgSpan.className = `log-${level}`;
+  msgSpan.textContent = `[${level.toUpperCase()}] ${msg}`;
+  line.appendChild(timeSpan);
+  line.appendChild(msgSpan);
+  debugLog.appendChild(line);
+  debugLog.scrollTop = debugLog.scrollHeight;
+}
+
 async function initProviderSelect(): Promise<void> {
+  log('info', 'Initializing provider settings...');
   const [settings, llmAvailable] = await Promise.all([
     getSettings(),
     localLlmProvider.isAvailable(),
   ]);
+  log('info', `Provider: ${settings.provider}, LLM available: ${llmAvailable}`);
 
   if (!llmAvailable) {
     const llmOption = providerSelect.querySelector<HTMLOptionElement>('option[value="local-llm"]');
@@ -63,23 +81,48 @@ providerSelect.addEventListener('change', async () => {
 
 translateBtn.addEventListener('click', async () => {
   const isLocalLlm = providerSelect.value === 'local-llm';
+  log('info', `Translate clicked (provider: ${providerSelect.value})`);
   try {
     translateBtn.disabled = true;
     statusDiv.textContent = isLocalLlm ? `${LOCAL_LLM_MODEL} 準備中...` : '翻訳中...';
     statusDiv.className = 'status loading';
 
-    // Get active tab
     const activeTabs = await tabs.query({ active: true, currentWindow: true });
     const tab = activeTabs[0];
+    log('info', `Active tab: id=${tab?.id}, url=${tab?.url?.slice(0, 50)}`);
 
     if (!tab?.id) {
       throw new Error('タブが見つかりません');
     }
 
-    // Send message to content script
     const message: TranslatePageMessage = { type: 'TRANSLATE_PAGE' };
-    const response = await tabs.sendMessage(tab.id, message)
-      ?? { success: false, error: 'Content scriptから応答がありません' };
+    log('info', 'Sending TRANSLATE_PAGE to content script...');
+
+    let response: { success: boolean; error?: string } | undefined;
+    try {
+      response = await tabs.sendMessage(tab.id, message);
+    } catch {
+      log('warn', 'sendMessage failed, content script not injected. Retrying...');
+    }
+
+    if (!response) {
+      log('info', 'Injecting content script via scripting API...');
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js'],
+      });
+      // CSS too
+      await chrome.scripting.insertCSS({
+        target: { tabId: tab.id },
+        files: ['content.css'],
+      }).catch(() => { /* CSS may already be loaded */ });
+
+      log('info', 'Retrying TRANSLATE_PAGE...');
+      response = await tabs.sendMessage(tab.id, message)
+        ?? { success: false, error: 'Content scriptの注入に失敗しました。ページをリフレッシュしてください。' };
+    }
+
+    log('info', `Response: ${JSON.stringify(response)}`);
 
     if (response.success) {
       statusDiv.textContent = '翻訳完了!';
@@ -88,7 +131,9 @@ translateBtn.addEventListener('click', async () => {
       throw new Error(response.error || '翻訳に失敗しました');
     }
   } catch (error) {
-    statusDiv.textContent = `エラー: ${error instanceof Error ? error.message : '不明なエラー'}`;
+    const msg = error instanceof Error ? error.message : '不明なエラー';
+    log('error', msg);
+    statusDiv.textContent = `エラー: ${msg}`;
     statusDiv.className = 'status error';
   } finally {
     translateBtn.disabled = false;
@@ -101,10 +146,16 @@ runtime.onMessage.addListener((message: ModelStatusMessage) => {
 
   if (message.status === 'loading' && message.progress) {
     const pct = Math.round(message.progress.progress);
+    log('info', `DL ${message.progress.file}: ${pct}%`);
     statusDiv.textContent = `${LOCAL_LLM_MODEL} DL中... ${pct}%`;
     statusDiv.className = 'status loading';
   } else if (message.status === 'loading') {
+    log('info', 'Model loading...');
     statusDiv.textContent = `${LOCAL_LLM_MODEL} 準備中...`;
     statusDiv.className = 'status loading';
+  } else if (message.status === 'ready') {
+    log('info', 'Model ready');
+  } else if (message.status === 'error') {
+    log('error', `Model error: ${message.progress?.file ?? 'unknown'}`);
   }
 });

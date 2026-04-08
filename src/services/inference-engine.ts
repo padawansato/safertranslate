@@ -1,21 +1,16 @@
 /**
  * Inference Engine - Shared module for Transformers.js model loading and inference
- * Extracted from offscreen.ts so it can be reused across Chrome offscreen and Safari contexts
+ * Uses dynamic import so the window polyfill runs BEFORE Transformers.js loads.
  */
 
 // Polyfill: Safari background runs as service_worker (no `window` global).
-// ONNX Runtime / Transformers.js expects `window` to exist.
+// Must run before Transformers.js is imported (hence dynamic import below).
 if (typeof window === 'undefined' && typeof globalThis !== 'undefined') {
   (globalThis as unknown as Record<string, unknown>).window = globalThis;
 }
 
-import { pipeline, env } from '@huggingface/transformers';
+// Only import the TYPE (erased at runtime, no hoisting issue)
 import type { TranslationPipeline } from '@huggingface/transformers';
-
-// Configure WASM paths to use locally bundled files
-if (env.backends.onnx.wasm) {
-  env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('wasm/');
-}
 
 export const MODEL_ID = 'Xenova/m2m100_418M';
 
@@ -28,34 +23,39 @@ export type StatusChangeCallback = (
 let translationPipeline: TranslationPipeline | null = null;
 let loadingPromise: Promise<TranslationPipeline> | null = null;
 let onStatusChange: StatusChangeCallback | undefined;
+let wasmConfigured = false;
 
-/**
- * Initialize the inference engine with an optional status change callback.
- * Decouples notification logic (e.g. chrome.runtime.sendMessage) from the engine.
- */
 export function initInferenceEngine(callback?: StatusChangeCallback): void {
   onStatusChange = callback;
 }
 
-/**
- * Get or create the translation pipeline (lazy, deduplicated).
- * Uses Promise sharing: concurrent requests await the same loading Promise.
- */
+async function loadPipeline(): Promise<TranslationPipeline> {
+  const { pipeline, env } = await import('@huggingface/transformers');
+
+  if (!wasmConfigured && env.backends.onnx.wasm) {
+    env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('wasm/');
+    env.backends.onnx.wasm.numThreads = 1;
+    wasmConfigured = true;
+  }
+
+  return pipeline('translation', MODEL_ID, {
+    progress_callback: (event: { status: string; file?: string; progress?: number }) => {
+      if (event.status === 'progress' && event.file && event.progress !== undefined) {
+        onStatusChange?.('loading', undefined, { file: event.file, progress: event.progress });
+      }
+    },
+  }) as Promise<TranslationPipeline>;
+}
+
 export async function getOrCreatePipeline(): Promise<TranslationPipeline> {
   if (translationPipeline) return translationPipeline;
   if (loadingPromise) return loadingPromise;
 
   onStatusChange?.('loading');
 
-  loadingPromise = pipeline('translation', MODEL_ID, {
-    progress_callback: (event: { status: string; file?: string; progress?: number }) => {
-      if (event.status === 'progress' && event.file && event.progress !== undefined) {
-        onStatusChange?.('loading', undefined, { file: event.file, progress: event.progress });
-      }
-    },
-  })
+  loadingPromise = loadPipeline()
     .then((pipe) => {
-      translationPipeline = pipe as TranslationPipeline;
+      translationPipeline = pipe;
       onStatusChange?.('ready');
       return translationPipeline;
     })
@@ -71,9 +71,6 @@ export async function getOrCreatePipeline(): Promise<TranslationPipeline> {
   return loadingPromise;
 }
 
-/**
- * Translate text using the pipeline, loading the model if needed.
- */
 export async function handleTranslate(text: string): Promise<string> {
   const pipe = await getOrCreatePipeline();
   const result = await pipe(text, { src_lang: 'en', tgt_lang: 'ja' });
