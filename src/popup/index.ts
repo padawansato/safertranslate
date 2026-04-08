@@ -4,10 +4,18 @@
  */
 
 import type { TranslatePageMessage, TranslationProviderType } from '@/services/types';
-import { tabs } from '@/lib/browser';
+import { tabs, runtime } from '@/lib/browser';
 import { getSettings, saveSettings } from '@/services/settings';
 import { localLlmProvider } from '@/services/providers/local-llm';
 import { initBuildInfo } from './buildInfo';
+
+const LOCAL_LLM_MODEL = 'Xenova/m2m100_418M';
+
+interface ModelStatusMessage {
+  type: 'OFFSCREEN_MODEL_STATUS';
+  status: 'loading' | 'ready' | 'error';
+  progress?: { file: string; progress: number };
+}
 
 initBuildInfo();
 
@@ -44,15 +52,20 @@ initProviderSelect();
 providerSelect.addEventListener('change', async () => {
   const provider = providerSelect.value as TranslationProviderType;
   await saveSettings({ provider });
-  const label = provider === 'local-llm' ? 'ローカルLLM' : 'MyMemory API';
-  statusDiv.textContent = `翻訳エンジン: ${label}`;
-  statusDiv.className = 'status success';
+  if (provider === 'local-llm') {
+    statusDiv.textContent = `ローカルLLM (${LOCAL_LLM_MODEL})\n初回はモデルDLが必要です`;
+    statusDiv.className = 'status loading';
+  } else {
+    statusDiv.textContent = '翻訳エンジン: MyMemory API';
+    statusDiv.className = 'status success';
+  }
 });
 
 translateBtn.addEventListener('click', async () => {
+  const isLocalLlm = providerSelect.value === 'local-llm';
   try {
     translateBtn.disabled = true;
-    statusDiv.textContent = '翻訳中...';
+    statusDiv.textContent = isLocalLlm ? `${LOCAL_LLM_MODEL} 準備中...` : '翻訳中...';
     statusDiv.className = 'status loading';
 
     // Get active tab
@@ -79,5 +92,19 @@ translateBtn.addEventListener('click', async () => {
     statusDiv.className = 'status error';
   } finally {
     translateBtn.disabled = false;
+  }
+});
+
+// Listen for model download progress from background/offscreen
+runtime.onMessage.addListener((message: ModelStatusMessage) => {
+  if (message.type !== 'OFFSCREEN_MODEL_STATUS') return;
+
+  if (message.status === 'loading' && message.progress) {
+    const pct = Math.round(message.progress.progress);
+    statusDiv.textContent = `${LOCAL_LLM_MODEL} DL中... ${pct}%`;
+    statusDiv.className = 'status loading';
+  } else if (message.status === 'loading') {
+    statusDiv.textContent = `${LOCAL_LLM_MODEL} 準備中...`;
+    statusDiv.className = 'status loading';
   }
 });

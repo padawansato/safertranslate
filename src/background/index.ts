@@ -29,8 +29,16 @@ async function ensureOffscreenDocument(): Promise<void> {
   creatingOffscreen = null;
 }
 
+let safariEngineInitialized = false;
+
 async function handleSafariTranslate(message: { type: string; text?: string }): Promise<unknown> {
   const engine = await import('@/services/inference-engine');
+  if (!safariEngineInitialized) {
+    engine.initInferenceEngine((status, error, progress) => {
+      chrome.runtime.sendMessage({ type: 'OFFSCREEN_MODEL_STATUS', status, error, progress });
+    });
+    safariEngineInitialized = true;
+  }
   if (message.type === 'OFFSCREEN_TRANSLATE') {
     const translatedText = await engine.handleTranslate(message.text ?? '');
     return { translatedText, sourceText: message.text };

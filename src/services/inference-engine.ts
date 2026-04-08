@@ -3,6 +3,12 @@
  * Extracted from offscreen.ts so it can be reused across Chrome offscreen and Safari contexts
  */
 
+// Polyfill: Safari background runs as service_worker (no `window` global).
+// ONNX Runtime / Transformers.js expects `window` to exist.
+if (typeof window === 'undefined' && typeof globalThis !== 'undefined') {
+  (globalThis as unknown as Record<string, unknown>).window = globalThis;
+}
+
 import { pipeline, env } from '@huggingface/transformers';
 import type { TranslationPipeline } from '@huggingface/transformers';
 
@@ -11,9 +17,13 @@ if (env.backends.onnx.wasm) {
   env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL('wasm/');
 }
 
-const MODEL_ID = 'Helsinki-NLP/opus-mt-en-ja';
+export const MODEL_ID = 'Xenova/m2m100_418M';
 
-type StatusChangeCallback = (status: 'loading' | 'ready' | 'error', error?: string) => void;
+export type StatusChangeCallback = (
+  status: 'loading' | 'ready' | 'error',
+  error?: string,
+  progress?: { file: string; progress: number },
+) => void;
 
 let translationPipeline: TranslationPipeline | null = null;
 let loadingPromise: Promise<TranslationPipeline> | null = null;
@@ -35,7 +45,15 @@ export async function getOrCreatePipeline(): Promise<TranslationPipeline> {
   if (translationPipeline) return translationPipeline;
   if (loadingPromise) return loadingPromise;
 
-  loadingPromise = pipeline('translation', MODEL_ID, { dtype: 'q8' })
+  onStatusChange?.('loading');
+
+  loadingPromise = pipeline('translation', MODEL_ID, {
+    progress_callback: (event: { status: string; file?: string; progress?: number }) => {
+      if (event.status === 'progress' && event.file && event.progress !== undefined) {
+        onStatusChange?.('loading', undefined, { file: event.file, progress: event.progress });
+      }
+    },
+  })
     .then((pipe) => {
       translationPipeline = pipe as TranslationPipeline;
       onStatusChange?.('ready');
@@ -58,6 +76,6 @@ export async function getOrCreatePipeline(): Promise<TranslationPipeline> {
  */
 export async function handleTranslate(text: string): Promise<string> {
   const pipe = await getOrCreatePipeline();
-  const result = await pipe(text);
+  const result = await pipe(text, { src_lang: 'en', tgt_lang: 'ja' });
   return (result as Array<{ translation_text: string }>)[0]?.translation_text ?? '';
 }

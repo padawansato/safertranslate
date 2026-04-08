@@ -52,7 +52,7 @@ describe('inference-engine', () => {
   });
 
   describe('getOrCreatePipeline', () => {
-    it('should create pipeline with correct model ID and dtype q8', async () => {
+    it('should create pipeline with correct model ID', async () => {
       const { initInferenceEngine, getOrCreatePipeline } = await loadFreshModule();
       initInferenceEngine();
 
@@ -60,8 +60,8 @@ describe('inference-engine', () => {
 
       expect(mockPipelineFn).toHaveBeenCalledWith(
         'translation',
-        'Helsinki-NLP/opus-mt-en-ja',
-        { dtype: 'q8' }
+        'Xenova/m2m100_418M',
+        expect.objectContaining({ progress_callback: expect.any(Function) })
       );
     });
 

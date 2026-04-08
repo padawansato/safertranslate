@@ -7,8 +7,8 @@
 import { initInferenceEngine, getOrCreatePipeline, handleTranslate } from '@/services/inference-engine';
 
 // Pass status callback that sends chrome messages (offscreen-specific)
-initInferenceEngine((status, error) => {
-  chrome.runtime.sendMessage({ type: 'OFFSCREEN_MODEL_STATUS', status, error });
+initInferenceEngine((status, error, progress) => {
+  chrome.runtime.sendMessage({ type: 'OFFSCREEN_MODEL_STATUS', status, error, progress });
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
