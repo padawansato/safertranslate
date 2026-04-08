@@ -38,6 +38,6 @@ export const localLlmProvider: TranslationProvider = {
   },
 
   async isAvailable(): Promise<boolean> {
-    return typeof globalThis.chrome?.offscreen !== 'undefined';
+    return true;
   },
 };

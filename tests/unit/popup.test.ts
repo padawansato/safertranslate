@@ -82,7 +82,7 @@ describe('provider selector', () => {
     expect(saveSettings).toHaveBeenCalledWith({ provider: 'local-llm' });
   });
 
-  it('should disable local-llm option when not available (Safari)', async () => {
+  it('should disable local-llm option when provider reports unavailable', async () => {
     vi.mocked(localLlmProvider.isAvailable).mockResolvedValue(false);
 
     const select = document.getElementById('provider-select') as HTMLSelectElement;
@@ -101,6 +101,27 @@ describe('provider selector', () => {
 
     expect(llmOption.disabled).toBe(true);
     expect(llmOption.textContent).toContain('非対応');
+  });
+
+  it('should enable local-llm option on all browsers when available', async () => {
+    vi.mocked(localLlmProvider.isAvailable).mockResolvedValue(true);
+
+    const select = document.getElementById('provider-select') as HTMLSelectElement;
+    const llmOption = select.querySelector<HTMLOptionElement>('option[value="local-llm"]')!;
+
+    // Simulate initProviderSelect logic
+    const [, llmAvailable] = await Promise.all([
+      getSettings(),
+      localLlmProvider.isAvailable(),
+    ]);
+
+    if (!llmAvailable) {
+      llmOption.disabled = true;
+      llmOption.textContent += ' (非対応)';
+    }
+
+    expect(llmOption.disabled).toBe(false);
+    expect(llmOption.textContent).not.toContain('非対応');
   });
 
   it('should fallback to mymemory if local-llm was selected on unsupported browser', async () => {

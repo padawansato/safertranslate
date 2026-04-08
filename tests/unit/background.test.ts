@@ -1,9 +1,27 @@
 /**
  * Background Service Worker Tests
- * Tests offscreen document lifecycle and message relay
+ * Tests offscreen document lifecycle, message relay, and Safari direct inference
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mockHandleTranslate = vi.fn();
+const mockGetOrCreatePipeline = vi.fn();
+const mockInitInferenceEngine = vi.fn();
+
+vi.mock('@/services/inference-engine', () => ({
+  handleTranslate: (...args: unknown[]) => mockHandleTranslate(...args),
+  getOrCreatePipeline: (...args: unknown[]) => mockGetOrCreatePipeline(...args),
+  initInferenceEngine: (...args: unknown[]) => mockInitInferenceEngine(...args),
+}));
+
+vi.mock('@/lib/browser', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/browser')>();
+  return {
+    ...original,
+    hasOffscreenSupport: vi.fn().mockReturnValue(true),
+  };
+});
 
 type MessageListener = (
   message: Record<string, unknown>,
@@ -35,6 +53,11 @@ describe('background service worker', () => {
       translatedText: 'テスト',
       sourceText: 'test',
     });
+
+    // Default: Chrome mode (hasOffscreenSupport = true)
+    const { hasOffscreenSupport } = await import('@/lib/browser');
+    vi.mocked(hasOffscreenSupport).mockReturnValue(true);
+
     messageListener = await loadBackgroundModule();
   });
 
@@ -142,6 +165,94 @@ describe('background service worker', () => {
       );
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('Safari mode (no offscreen support)', () => {
+    beforeEach(async () => {
+      vi.resetAllMocks();
+      vi.resetModules();
+      (chrome.runtime.getURL as ReturnType<typeof vi.fn>).mockImplementation(
+        (path: string) => `safari-web-extension://mock-id/${path}`
+      );
+      mockHandleTranslate.mockResolvedValue('Safari翻訳');
+      mockGetOrCreatePipeline.mockResolvedValue({});
+
+      const { hasOffscreenSupport } = await import('@/lib/browser');
+      vi.mocked(hasOffscreenSupport).mockReturnValue(false);
+
+      messageListener = await loadBackgroundModule();
+    });
+
+    it('should handle OFFSCREEN_TRANSLATE directly via inference engine', async () => {
+      const sendResponse = vi.fn();
+      const keepOpen = messageListener(
+        { type: 'OFFSCREEN_TRANSLATE', text: 'Hello' },
+        { tab: { id: 1 } },
+        sendResponse
+      );
+
+      expect(keepOpen).toBe(true);
+
+      await vi.waitFor(() => {
+        expect(sendResponse).toHaveBeenCalled();
+      });
+
+      expect(mockHandleTranslate).toHaveBeenCalledWith('Hello');
+      expect(sendResponse).toHaveBeenCalledWith({
+        translatedText: 'Safari翻訳',
+        sourceText: 'Hello',
+      });
+    });
+
+    it('should handle OFFSCREEN_LOAD_MODEL directly', async () => {
+      const sendResponse = vi.fn();
+      messageListener(
+        { type: 'OFFSCREEN_LOAD_MODEL' },
+        { tab: { id: 1 } },
+        sendResponse
+      );
+
+      await vi.waitFor(() => {
+        expect(sendResponse).toHaveBeenCalled();
+      });
+
+      expect(mockGetOrCreatePipeline).toHaveBeenCalled();
+      expect(sendResponse).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('should NOT create offscreen document', async () => {
+      const sendResponse = vi.fn();
+      messageListener(
+        { type: 'OFFSCREEN_TRANSLATE', text: 'Hello' },
+        { tab: { id: 1 } },
+        sendResponse
+      );
+
+      await vi.waitFor(() => {
+        expect(sendResponse).toHaveBeenCalled();
+      });
+
+      expect(chrome.offscreen.createDocument).not.toHaveBeenCalled();
+    });
+
+    it('should return error when inference fails', async () => {
+      mockHandleTranslate.mockRejectedValue(new Error('WASM load error'));
+
+      const sendResponse = vi.fn();
+      messageListener(
+        { type: 'OFFSCREEN_TRANSLATE', text: 'Hello' },
+        { tab: { id: 1 } },
+        sendResponse
+      );
+
+      await vi.waitFor(() => {
+        expect(sendResponse).toHaveBeenCalled();
+      });
+
+      expect(sendResponse).toHaveBeenCalledWith({
+        error: expect.stringContaining('WASM load error'),
+      });
     });
   });
 });

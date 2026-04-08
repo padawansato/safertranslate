@@ -16,18 +16,8 @@ describe('localLlmProvider', () => {
   });
 
   describe('isAvailable', () => {
-    it('should return true when chrome.offscreen exists', async () => {
+    it('should always be available', async () => {
       expect(await localLlmProvider.isAvailable()).toBe(true);
-    });
-
-    it('should return false when chrome.offscreen is undefined', async () => {
-      const original = globalThis.chrome.offscreen;
-      // @ts-expect-error - Testing undefined offscreen
-      globalThis.chrome.offscreen = undefined;
-
-      expect(await localLlmProvider.isAvailable()).toBe(false);
-
-      globalThis.chrome.offscreen = original;
     });
   });
 

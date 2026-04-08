@@ -1,22 +1,18 @@
 /**
  * Offscreen Document Tests
- * Mocks Transformers.js to test message handling and pipeline lifecycle
+ * Mocks inference-engine module to test message handling and chrome integration
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockPipeline = vi.fn();
-const mockTranslate = vi.fn();
+const mockHandleTranslate = vi.fn();
+const mockGetOrCreatePipeline = vi.fn();
+const mockInitInferenceEngine = vi.fn();
 
-vi.mock('@huggingface/transformers', () => ({
-  pipeline: (...args: unknown[]) => mockPipeline(...args),
-  env: {
-    backends: {
-      onnx: {
-        wasm: { wasmPaths: '' },
-      },
-    },
-  },
+vi.mock('@/services/inference-engine', () => ({
+  handleTranslate: (...args: unknown[]) => mockHandleTranslate(...args),
+  getOrCreatePipeline: (...args: unknown[]) => mockGetOrCreatePipeline(...args),
+  initInferenceEngine: (...args: unknown[]) => mockInitInferenceEngine(...args),
 }));
 
 type MessageListener = (
@@ -41,9 +37,28 @@ describe('offscreen document', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.resetModules();
-    mockPipeline.mockResolvedValue(mockTranslate);
-    mockTranslate.mockResolvedValue([{ translation_text: 'テスト翻訳' }]);
+    mockHandleTranslate.mockResolvedValue('テスト翻訳');
+    mockGetOrCreatePipeline.mockResolvedValue({});
     messageListener = await loadOffscreenModule();
+  });
+
+  describe('initialization', () => {
+    it('should call initInferenceEngine with a status callback', () => {
+      expect(mockInitInferenceEngine).toHaveBeenCalledTimes(1);
+      expect(typeof mockInitInferenceEngine.mock.calls[0]?.[0]).toBe('function');
+    });
+
+    it('should send chrome message when status callback is invoked', () => {
+      const statusCallback = mockInitInferenceEngine.mock.calls[0]?.[0] as
+        (status: string, error?: string) => void;
+      statusCallback('ready');
+
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        type: 'OFFSCREEN_MODEL_STATUS',
+        status: 'ready',
+        error: undefined,
+      });
+    });
   });
 
   describe('OFFSCREEN_TRANSLATE', () => {
@@ -61,7 +76,7 @@ describe('offscreen document', () => {
       });
     });
 
-    it('should create pipeline with correct model on first request', async () => {
+    it('should call handleTranslate with the message text', async () => {
       const sendResponse = vi.fn();
       messageListener({ type: 'OFFSCREEN_TRANSLATE', text: 'Hello' }, {}, sendResponse);
 
@@ -69,15 +84,11 @@ describe('offscreen document', () => {
         expect(sendResponse).toHaveBeenCalled();
       });
 
-      expect(mockPipeline).toHaveBeenCalledWith(
-        'translation',
-        'Helsinki-NLP/opus-mt-en-ja',
-        { dtype: 'q8' }
-      );
+      expect(mockHandleTranslate).toHaveBeenCalledWith('Hello');
     });
 
-    it('should return error when model load fails', async () => {
-      mockPipeline.mockRejectedValue(new Error('Model load failed'));
+    it('should return error when translation fails', async () => {
+      mockHandleTranslate.mockRejectedValue(new Error('Model load failed'));
 
       const sendResponse = vi.fn();
       messageListener({ type: 'OFFSCREEN_TRANSLATE', text: 'Hello' }, {}, sendResponse);
@@ -102,6 +113,19 @@ describe('offscreen document', () => {
       });
 
       expect(sendResponse).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('should return error when model load fails', async () => {
+      mockGetOrCreatePipeline.mockRejectedValue(new Error('WASM error'));
+
+      const sendResponse = vi.fn();
+      messageListener({ type: 'OFFSCREEN_LOAD_MODEL' }, {}, sendResponse);
+
+      await vi.waitFor(() => {
+        expect(sendResponse).toHaveBeenCalled();
+      });
+
+      expect(sendResponse).toHaveBeenCalledWith({ error: 'Error: WASM error' });
     });
   });
 

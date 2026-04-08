@@ -1,9 +1,9 @@
 /**
  * Background Service Worker
- * Manages offscreen document lifecycle and message relay
+ * Manages offscreen document lifecycle (Chrome) and direct inference (Safari)
  */
 
-import { runtime } from '@/lib/browser';
+import { runtime, hasOffscreenSupport } from '@/lib/browser';
 
 let creatingOffscreen: Promise<void> | null = null;
 
@@ -29,6 +29,16 @@ async function ensureOffscreenDocument(): Promise<void> {
   creatingOffscreen = null;
 }
 
+async function handleSafariTranslate(message: { type: string; text?: string }): Promise<unknown> {
+  const engine = await import('@/services/inference-engine');
+  if (message.type === 'OFFSCREEN_TRANSLATE') {
+    const translatedText = await engine.handleTranslate(message.text ?? '');
+    return { translatedText, sourceText: message.text };
+  }
+  await engine.getOrCreatePipeline();
+  return { success: true };
+}
+
 runtime.onInstalled.addListener((details) => {
   console.log('[SaferTranslate] Extension installed:', details.reason);
 });
@@ -38,14 +48,21 @@ runtime.onMessage.addListener((message, sender, sendResponse) => {
   const senderUrl = (sender as { url?: string }).url ?? '';
   const fromOffscreen = senderUrl.includes('offscreen');
 
-  // Don't relay messages from offscreen document (prevent loops)
   if (fromOffscreen) return false;
 
   if (fromContentScript && (message.type === 'OFFSCREEN_TRANSLATE' || message.type === 'OFFSCREEN_LOAD_MODEL')) {
-    ensureOffscreenDocument()
-      .then(() => chrome.runtime.sendMessage(message))
-      .then((response) => sendResponse(response))
-      .catch((error) => sendResponse({ error: String(error) }));
+    if (hasOffscreenSupport()) {
+      // Chrome: relay to offscreen document
+      ensureOffscreenDocument()
+        .then(() => chrome.runtime.sendMessage(message))
+        .then((response) => sendResponse(response))
+        .catch((error) => sendResponse({ error: String(error) }));
+    } else {
+      // Safari: run inference directly in background
+      handleSafariTranslate(message)
+        .then((response) => sendResponse(response))
+        .catch((error) => sendResponse({ error: String(error) }));
+    }
     return true;
   }
 

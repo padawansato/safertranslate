@@ -3,7 +3,7 @@
  * Copies manifest and icons, and fixes popup HTML path.
  */
 
-import { copyFileSync, mkdirSync, renameSync, rmSync } from 'fs';
+import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -37,4 +37,13 @@ renameSync(
 );
 rmSync(resolve(dist, 'src'), { recursive: true });
 
-console.log('[prepare-safari] Done: manifest, icons, popup path fixed in dist-safari/');
+// Copy WASM files for local LLM inference engine
+const wasmDir = resolve(dist, 'wasm');
+mkdirSync(wasmDir, { recursive: true });
+const onnxDir = resolve(root, 'node_modules/onnxruntime-web/dist');
+const wasmFiles = readdirSync(onnxDir).filter(f => f.endsWith('.wasm'));
+for (const file of wasmFiles) {
+  copyFileSync(resolve(onnxDir, file), resolve(wasmDir, file));
+}
+
+console.log('[prepare-safari] Done: manifest, icons, popup path, WASM files fixed in dist-safari/');
