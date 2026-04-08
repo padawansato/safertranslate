@@ -36,6 +36,10 @@ const chromeMock = {
       WORKERS: 'WORKERS',
     },
   },
+  scripting: {
+    executeScript: vi.fn(),
+    insertCSS: vi.fn(),
+  },
 };
 
 // @ts-expect-error - Mocking global chrome/browser objects
