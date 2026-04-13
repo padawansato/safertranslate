@@ -53,6 +53,32 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 3. 「パッケージ化されていない拡張機能を読み込む」→ dist/
 4. 任意の英語ページでアイコンクリック
 
+## Safari 拡張テスト手順
+
+1. `npm run build:safari` — dist-safari/ を生成
+2. `rm -rf safari-extension && npm run safari:convert` — Xcode プロジェクト生成
+3. `npm run safari:build` — .app ビルド
+4. `open /Users/$(whoami)/Library/Developer/Xcode/DerivedData/SaferTranslate-*/Build/Products/Debug/SaferTranslate.app` — 拡張登録
+5. Safari 設定 → 機能拡張 → SaferTranslate を ON（初回のみ）
+6. 任意の英語ページでアイコンクリック
+
+### 再ビルド後の自動リロード
+
+Safari は `open app` だけでは新ビルドを読まない。以下で強制リロード:
+
+```bash
+pluginkit -e ignore -i com.padawansato.SaferTranslate.Extension && \
+sleep 1 && \
+pluginkit -e use -i com.padawansato.SaferTranslate.Extension
+```
+
+### Safari 固有の制約
+
+- **Service Worker で `import()` 不可** — W3C 仕様 ([w3c/ServiceWorker#1585](https://github.com/w3c/ServiceWorker/issues/1585))。local-llm は content script 内で実行
+- **`content_scripts` で `"type": "module"` 非対応** — IIFE のまま利用
+- **`web_accessible_resources` 必須** — content script から `import(chrome.runtime.getURL(...))` する場合、対象ファイルを宣言
+- **CSP `wasm-unsafe-eval` 必須** — Transformers.js の WASM 実行に必要
+
 ## ファイル構成
 
 - src/content/ - Content Script（ページ内実行）
@@ -62,14 +88,26 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 
 ## アーキテクチャ
 
+### Chrome
 ```
 [Popup] --message--> [Background SW] --message--> [Content Script]
-                                                        |
-                                                        v
-                                               [translator.ts]
-                                                        |
-                                                        v
-                                               [MyMemory API]
+                          |                             |
+                          v                             v
+                 [Offscreen Doc]                 [translator.ts]
+                 Transformers.js                  /          \
+                 (local-llm)              [MyMemory API]  [Background SW]
+                                                            (relay for local-llm)
+```
+
+### Safari
+```
+[Popup] --message--> [Content Script]
+                          |
+                          v
+                   [translator.ts]
+                    /          \
+            [MyMemory API]   [import(chrome.runtime.getURL('inference-engine.js'))]
+                             Transformers.js 実行（Safari SW は import() 不可のため）
 ```
 
 ## 翻訳API
