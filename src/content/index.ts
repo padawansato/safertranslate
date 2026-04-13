@@ -26,53 +26,69 @@ const BATCH_DELAY_MS = 200;
  * For TRANSLATE_PAGE, we respond IMMEDIATELY (via sendResponse) with a
  * TRANSLATION_STARTED ack that includes the element count. The actual
  * translation runs asynchronously afterwards and emits progress via
- * runtime.sendMessage so the popup can track per-batch progress instead
- * of waiting for the entire page to finish.
+ * runtime.sendMessage so the popup can track per-batch progress.
+ *
+ * Guard against duplicate module execution: if this content script runs
+ * twice on the same page (e.g., once via manifest `content_scripts` and
+ * once via `scripting.executeScript` fallback in `contentScriptInjector`),
+ * both instances would register listeners and each TRANSLATE_PAGE would
+ * trigger two parallel `runTranslation` calls, double-injecting every box.
+ * The window-level flag ensures only the first instance binds.
  */
-runtime.onMessage.addListener(
-  (message: ExtensionMessage, _sender, sendResponse) => {
-    if (message.type !== 'TRANSLATE_PAGE') return false;
+const WINDOW_GUARD = '__safertranslate_listener_v1' as const;
+type GuardedWindow = Window & { [WINDOW_GUARD]?: boolean };
+const guardedWindow = window as GuardedWindow;
 
-    try {
-      if (hasTranslations()) {
-        console.log('[SaferTranslate] Removing existing translations');
-        removeAllTranslations();
-        const ack: TranslationStartedMessage = { type: 'TRANSLATION_STARTED', total: 0 };
-        sendResponse(ack);
-        // Emit a synthetic "complete" so the popup can close out its state.
-        const complete: TranslationCompleteMessage = {
-          type: 'TRANSLATION_COMPLETE',
-          translatedCount: 0,
-          elapsedMs: 0,
+if (!guardedWindow[WINDOW_GUARD]) {
+  guardedWindow[WINDOW_GUARD] = true;
+
+  runtime.onMessage.addListener(
+    (message: ExtensionMessage, _sender, sendResponse) => {
+      if (message.type !== 'TRANSLATE_PAGE') return false;
+
+      try {
+        if (hasTranslations()) {
+          console.log('[SaferTranslate] Removing existing translations');
+          removeAllTranslations();
+          const ack: TranslationStartedMessage = { type: 'TRANSLATION_STARTED', total: 0 };
+          sendResponse(ack);
+          const complete: TranslationCompleteMessage = {
+            type: 'TRANSLATION_COMPLETE',
+            translatedCount: 0,
+            elapsedMs: 0,
+          };
+          void runtime.sendMessage(complete);
+          return true;
+        }
+
+        const elements = extractTranslatableElements();
+        console.log(`[SaferTranslate] Found ${elements.length} elements to translate`);
+
+        const ack: TranslationStartedMessage = {
+          type: 'TRANSLATION_STARTED',
+          total: elements.length,
         };
-        void runtime.sendMessage(complete);
-        return false;
+        sendResponse(ack);
+
+        void runTranslation(elements);
+      } catch (error) {
+        const startFailed: TranslationStartFailedMessage = {
+          type: 'TRANSLATION_START_FAILED',
+          error: String(error),
+        };
+        sendResponse(startFailed);
       }
 
-      const elements = extractTranslatableElements();
-      console.log(`[SaferTranslate] Found ${elements.length} elements to translate`);
-
-      const ack: TranslationStartedMessage = {
-        type: 'TRANSLATION_STARTED',
-        total: elements.length,
-      };
-      sendResponse(ack);
-
-      // Kick off async translation. Errors are caught inside the runner and
-      // reported via runtime.sendMessage(TRANSLATION_FAILED).
-      void runTranslation(elements);
-    } catch (error) {
-      const startFailed: TranslationStartFailedMessage = {
-        type: 'TRANSLATION_START_FAILED',
-        error: String(error),
-      };
-      sendResponse(startFailed);
-    }
-
-    // Sync response — no async response promised, no need to keep channel open.
-    return false;
-  },
-);
+      // Return true keeps the channel alive long enough for Safari to
+      // reliably deliver the sync sendResponse above. Returning false
+      // with a sync response was observed to drop the ack on Safari 17,
+      // causing contentScriptInjector's Step-1 sendMessage to resolve
+      // with undefined and fall through to executeScript, which then
+      // injected this content script a second time.
+      return true;
+    },
+  );
+}
 
 /**
  * Run the translation loop and emit progress/complete/failed events.
