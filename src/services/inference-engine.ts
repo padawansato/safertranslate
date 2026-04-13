@@ -12,7 +12,11 @@ if (typeof window === 'undefined' && typeof globalThis !== 'undefined') {
 // v3 types: use generic function type to avoid complex union issues
 type TranslationPipelineFn = (text: string, options?: Record<string, unknown>) => Promise<Array<{ translation_text: string }>>;
 
-export const MODEL_ID = 'Xenova/m2m100_418M';
+// OPUS-MT en->ja model is much smaller (~150MB) than m2m100_418M (~475MB)
+// and loads significantly faster. Quality is lower but acceptable for testing
+// and most practical use cases. Being language-pair specific, it does not
+// require src_lang/tgt_lang parameters at inference time.
+export const MODEL_ID = 'Xenova/opus-mt-en-jap';
 
 export type StatusChangeCallback = (
   status: 'loading' | 'ready' | 'error',
@@ -75,6 +79,7 @@ export async function getOrCreatePipeline(): Promise<TranslationPipelineFn> {
 
 export async function handleTranslate(text: string): Promise<string> {
   const pipe = await getOrCreatePipeline();
-  const result = await pipe(text, { src_lang: 'en', tgt_lang: 'ja' });
+  // OPUS-MT en->ja is language-pair specific; call with text only.
+  const result = await pipe(text);
   return (result as Array<{ translation_text: string }>)[0]?.translation_text ?? '';
 }

@@ -10,7 +10,7 @@ import { localLlmProvider } from '@/services/providers/local-llm';
 import { initBuildInfo } from './buildInfo';
 import { ensureContentScriptAndSendMessage } from '@/lib/contentScriptInjector';
 
-const LOCAL_LLM_MODEL = 'Xenova/m2m100_418M';
+const LOCAL_LLM_MODEL = 'Xenova/opus-mt-en-jap';
 
 interface ModelStatusMessage {
   type: 'OFFSCREEN_MODEL_STATUS';

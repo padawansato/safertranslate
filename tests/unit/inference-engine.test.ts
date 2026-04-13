@@ -42,6 +42,16 @@ describe('inference-engine', () => {
       expect(result).toBe('テスト翻訳');
     });
 
+    it('should call pipeline without src_lang/tgt_lang (OPUS-MT is en->ja pair-specific)', async () => {
+      const { initInferenceEngine, handleTranslate } = await loadFreshModule();
+      initInferenceEngine();
+
+      await handleTranslate('Hello');
+
+      // OPUS-MT models are language-pair specific; no need for src_lang/tgt_lang
+      expect(mockTranslate).toHaveBeenCalledWith('Hello');
+    });
+
     it('should propagate errors from failed model load', async () => {
       mockPipelineFn.mockRejectedValue(new Error('WASM load failed'));
       const { initInferenceEngine, handleTranslate } = await loadFreshModule();
@@ -60,7 +70,7 @@ describe('inference-engine', () => {
 
       expect(mockPipelineFn).toHaveBeenCalledWith(
         'translation',
-        'Xenova/m2m100_418M',
+        'Xenova/opus-mt-en-jap',
         expect.objectContaining({ progress_callback: expect.any(Function) })
       );
     });
