@@ -7,6 +7,11 @@ import { sharedConfig } from './vite.config.shared';
 export default defineConfig(
   mergeConfig(sharedConfig, {
     build: {
+      // Disable Vite's modulePreload helper so inference-engine.js does not
+      // import __vitePreload from background.js — required for content script
+      // to dynamically import inference-engine at runtime without pulling in
+      // background service worker code.
+      modulePreload: false,
       outDir: 'dist-safari',
       rollupOptions: {
         input: {

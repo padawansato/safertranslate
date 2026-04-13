@@ -8,8 +8,9 @@ import { tabs, runtime } from '@/lib/browser';
 import { getSettings, saveSettings } from '@/services/settings';
 import { localLlmProvider } from '@/services/providers/local-llm';
 import { initBuildInfo } from './buildInfo';
+import { ensureContentScriptAndSendMessage } from '@/lib/contentScriptInjector';
 
-const LOCAL_LLM_MODEL = 'Xenova/m2m100_418M';
+const LOCAL_LLM_MODEL = 'Xenova/opus-mt-en-jap';
 
 interface ModelStatusMessage {
   type: 'OFFSCREEN_MODEL_STATUS';
@@ -98,29 +99,7 @@ translateBtn.addEventListener('click', async () => {
     const message: TranslatePageMessage = { type: 'TRANSLATE_PAGE' };
     log('info', 'Sending TRANSLATE_PAGE to content script...');
 
-    let response: { success: boolean; error?: string } | undefined;
-    try {
-      response = await tabs.sendMessage(tab.id, message);
-    } catch {
-      log('warn', 'sendMessage failed, content script not injected. Retrying...');
-    }
-
-    if (!response) {
-      log('info', 'Injecting content script via scripting API...');
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['content.js'],
-      });
-      // CSS too
-      await chrome.scripting.insertCSS({
-        target: { tabId: tab.id },
-        files: ['content.css'],
-      }).catch(() => { /* CSS may already be loaded */ });
-
-      log('info', 'Retrying TRANSLATE_PAGE...');
-      response = await tabs.sendMessage(tab.id, message)
-        ?? { success: false, error: 'Content scriptの注入に失敗しました。ページをリフレッシュしてください。' };
-    }
+    const response = await ensureContentScriptAndSendMessage(tab.id, message);
 
     log('info', `Response: ${JSON.stringify(response)}`);
 

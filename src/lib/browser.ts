@@ -15,7 +15,12 @@ export const runtime = api.runtime;
 export const tabs = api.tabs;
 export const storage = api.storage;
 export const offscreen = (api as typeof chrome).offscreen;
+export const scripting = (api as typeof chrome).scripting;
 
 export function hasOffscreenSupport(): boolean {
   return typeof globalThis.chrome?.offscreen !== 'undefined';
+}
+
+export function isSafari(): boolean {
+  return typeof globalThis.browser !== 'undefined' && !hasOffscreenSupport();
 }
