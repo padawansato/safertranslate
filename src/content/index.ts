@@ -15,6 +15,7 @@ import { translate } from '@/services/translator';
 import { extractTranslatableElements } from './textExtractor';
 import { injectTranslation, removeAllTranslations, hasTranslations } from './domInjector';
 import { runtime } from '@/lib/browser';
+import { runOnceInContentScript } from '@/lib/singletonContentScript';
 import './styles.css';
 
 const BATCH_SIZE = 5;
@@ -28,20 +29,11 @@ const BATCH_DELAY_MS = 200;
  * translation runs asynchronously afterwards and emits progress via
  * runtime.sendMessage so the popup can track per-batch progress.
  *
- * Guard against duplicate module execution: if this content script runs
- * twice on the same page (e.g., once via manifest `content_scripts` and
- * once via `scripting.executeScript` fallback in `contentScriptInjector`),
- * both instances would register listeners and each TRANSLATE_PAGE would
- * trigger two parallel `runTranslation` calls, double-injecting every box.
- * The window-level flag ensures only the first instance binds.
+ * The singleton guard (#8, rules/safari-messaging.md) ensures this
+ * listener is registered only once per isolated-world window even when
+ * the content script is injected twice (manifest + executeScript fallback).
  */
-const WINDOW_GUARD = '__safertranslate_listener_v1' as const;
-type GuardedWindow = Window & { [WINDOW_GUARD]?: boolean };
-const guardedWindow = window as GuardedWindow;
-
-if (!guardedWindow[WINDOW_GUARD]) {
-  guardedWindow[WINDOW_GUARD] = true;
-
+runOnceInContentScript('__safertranslate_listener_v1', () => {
   runtime.onMessage.addListener(
     (message: ExtensionMessage, _sender, sendResponse) => {
       if (message.type !== 'TRANSLATE_PAGE') return false;
@@ -79,16 +71,12 @@ if (!guardedWindow[WINDOW_GUARD]) {
         sendResponse(startFailed);
       }
 
-      // Return true keeps the channel alive long enough for Safari to
-      // reliably deliver the sync sendResponse above. Returning false
-      // with a sync response was observed to drop the ack on Safari 17,
-      // causing contentScriptInjector's Step-1 sendMessage to resolve
-      // with undefined and fall through to executeScript, which then
-      // injected this content script a second time.
+      // return true — see rules/safari-messaging.md. Safari 17 drops
+      // sync sendResponse when a listener returns false.
       return true;
     },
   );
-}
+});
 
 /**
  * Run the translation loop and emit progress/complete/failed events.

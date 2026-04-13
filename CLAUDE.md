@@ -78,6 +78,7 @@ pluginkit -e use -i com.padawansato.SaferTranslate.Extension
 - **`content_scripts` で `"type": "module"` 非対応** — IIFE のまま利用
 - **`web_accessible_resources` 必須** — content script から `import(chrome.runtime.getURL(...))` する場合、対象ファイルを宣言
 - **CSP `wasm-unsafe-eval` 必須** — Transformers.js の WASM 実行に必要
+- **`runtime.onMessage` と二重注入対策** — [rules/safari-messaging.md](rules/safari-messaging.md)
 
 ## ファイル構成
 
