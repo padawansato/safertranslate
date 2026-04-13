@@ -1,6 +1,10 @@
 /**
  * Cross-browser content script injection module.
- * Ensures a content script is running in the target tab, injecting it if needed.
+ *
+ * Ensures a content script is running in the target tab, injecting it if
+ * needed, then forwards the message. Returns the raw content script
+ * response on success, or throws InjectorError with a user-facing message
+ * on injection/messaging failure.
  */
 
 import { tabs, scripting, isSafari } from '@/lib/browser';
@@ -13,24 +17,25 @@ const GENERIC_RELOAD_ERROR =
 
 const SAFARI_INIT_DELAY_MS = 100;
 
-type InjectorResult = { success: boolean; error?: string; needsPermission?: boolean };
+export class InjectorError extends Error {
+  readonly needsPermission: boolean;
+  constructor(message: string, needsPermission = false) {
+    super(message);
+    this.name = 'InjectorError';
+    this.needsPermission = needsPermission;
+  }
+}
 
-/**
- * Tries to send a message to the content script in the given tab.
- * If the content script is not yet injected, it injects it first, then retries.
- */
 export async function ensureContentScriptAndSendMessage(
   tabId: number,
   message: { type: string },
-): Promise<InjectorResult> {
-  // Step 1: Try sending the message directly.
+): Promise<unknown> {
+  // Step 1: Try sending the message directly (content script may already be loaded).
   try {
     const response = await tabs.sendMessage(tabId, message);
-    if (response != null) {
-      return response as InjectorResult;
-    }
+    if (response != null) return response;
   } catch {
-    // Content script not yet injected — fall through to injection.
+    // Fall through to injection.
   }
 
   // Step 2: Inject content script programmatically.
@@ -40,27 +45,19 @@ export async function ensureContentScriptAndSendMessage(
       files: ['content.js'],
     });
   } catch {
-    // Injection failed.
     if (isSafari()) {
-      return {
-        success: false,
-        needsPermission: true,
-        error: SAFARI_PERMISSION_ERROR,
-      };
+      throw new InjectorError(SAFARI_PERMISSION_ERROR, true);
     }
-    return {
-      success: false,
-      error: GENERIC_RELOAD_ERROR,
-    };
+    throw new InjectorError(GENERIC_RELOAD_ERROR, false);
   }
 
-  // Step 3: Inject CSS (errors are swallowed).
+  // Step 3: Inject CSS (errors are swallowed — it may already be present).
   await scripting.insertCSS({
     target: { tabId },
     files: ['content.css'],
-  }).catch(() => { /* CSS may already be loaded or not required */ });
+  }).catch(() => { /* ignore */ });
 
-  // Step 4: On Safari, wait for the content script to initialize.
+  // Step 4: On Safari, wait briefly for the content script to initialize.
   if (isSafari()) {
     await new Promise<void>((resolve) => setTimeout(resolve, SAFARI_INIT_DELAY_MS));
   }
@@ -68,11 +65,10 @@ export async function ensureContentScriptAndSendMessage(
   // Step 5: Retry sending the message.
   try {
     const response = await tabs.sendMessage(tabId, message);
-    if (response != null) {
-      return response as InjectorResult;
-    }
-    return { success: false, error: GENERIC_RELOAD_ERROR };
-  } catch {
-    return { success: false, error: GENERIC_RELOAD_ERROR };
+    if (response != null) return response;
+    throw new InjectorError(GENERIC_RELOAD_ERROR, false);
+  } catch (error) {
+    if (error instanceof InjectorError) throw error;
+    throw new InjectorError(GENERIC_RELOAD_ERROR, false);
   }
 }

@@ -1,14 +1,21 @@
 /**
  * Popup Script - Entry point
- * Handles popup UI interactions
+ * Handles popup UI interactions. Translation flow is driven by a
+ * phase-aware state machine (translateController) so the UI can show
+ * where a translation failed (unreachable vs stalled vs API error).
  */
 
-import type { TranslatePageMessage, TranslationProviderType } from '@/services/types';
+import type { TranslationProviderType } from '@/services/types';
 import { tabs, runtime } from '@/lib/browser';
 import { getSettings, saveSettings } from '@/services/settings';
 import { localLlmProvider } from '@/services/providers/local-llm';
 import { initBuildInfo } from './buildInfo';
-import { ensureContentScriptAndSendMessage } from '@/lib/contentScriptInjector';
+import { ensureContentScriptAndSendMessage, InjectorError } from '@/lib/contentScriptInjector';
+import {
+  createTranslateController,
+  type ControllerState,
+  type TimerHandle,
+} from './translateController';
 
 const LOCAL_LLM_MODEL = 'Xenova/opus-mt-en-jap';
 
@@ -55,7 +62,6 @@ async function initProviderSelect(): Promise<void> {
       llmOption.disabled = true;
       llmOption.textContent += ' (非対応)';
     }
-    // Force mymemory if local-llm was previously selected on unsupported browser
     if (settings.provider === 'local-llm') {
       await saveSettings({ provider: 'mymemory' });
       providerSelect.value = 'mymemory';
@@ -80,61 +86,126 @@ providerSelect.addEventListener('change', async () => {
   }
 });
 
-translateBtn.addEventListener('click', async () => {
-  const isLocalLlm = providerSelect.value === 'local-llm';
-  log('info', `Translate clicked (provider: ${providerSelect.value})`);
-  try {
-    translateBtn.disabled = true;
-    statusDiv.textContent = isLocalLlm ? `${LOCAL_LLM_MODEL} 準備中...` : '翻訳中...';
-    statusDiv.className = 'status loading';
+// --- Translate flow (state-machine driven) -------------------------------
 
+let lastWorkingState: Extract<ControllerState, { phase: 'working' }> | null = null;
+let elapsedTickHandle: number | undefined;
+
+function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${s}s`;
+}
+
+function renderState(state: ControllerState): void {
+  switch (state.phase) {
+    case 'idle':
+      statusDiv.textContent = '';
+      statusDiv.className = 'status';
+      translateBtn.disabled = false;
+      break;
+    case 'reaching':
+      statusDiv.textContent = 'Content scriptに接続中...';
+      statusDiv.className = 'status loading';
+      translateBtn.disabled = true;
+      break;
+    case 'working': {
+      translateBtn.disabled = true;
+      statusDiv.className = 'status loading';
+      const elapsed = formatElapsed(Date.now() - state.startedAt);
+      if (state.total === 0) {
+        statusDiv.textContent = `翻訳対象なし — ${elapsed}`;
+      } else {
+        statusDiv.textContent = `翻訳中 (${state.done}/${state.total}) — ${elapsed}`;
+      }
+      break;
+    }
+    case 'done':
+      statusDiv.textContent = `翻訳完了! (${state.translatedCount}件 / ${formatElapsed(state.elapsedMs)})`;
+      statusDiv.className = 'status success';
+      translateBtn.disabled = false;
+      break;
+    case 'error':
+      statusDiv.textContent = `エラー: ${state.message}`;
+      statusDiv.className = 'status error';
+      translateBtn.disabled = false;
+      break;
+  }
+}
+
+function stopElapsedTick(): void {
+  if (elapsedTickHandle !== undefined) {
+    clearInterval(elapsedTickHandle);
+    elapsedTickHandle = undefined;
+  }
+}
+
+function startElapsedTick(): void {
+  stopElapsedTick();
+  elapsedTickHandle = window.setInterval(() => {
+    if (lastWorkingState) renderState(lastWorkingState);
+  }, 500);
+}
+
+function onStateChange(state: ControllerState): void {
+  log('info', `state → ${state.phase}`);
+  if (state.phase === 'working') {
+    lastWorkingState = state;
+    startElapsedTick();
+  } else {
+    lastWorkingState = null;
+    stopElapsedTick();
+  }
+  renderState(state);
+}
+
+const controller = createTranslateController({
+  onStateChange,
+  sendMessage: async () => {
     const activeTabs = await tabs.query({ active: true, currentWindow: true });
     const tab = activeTabs[0];
-    log('info', `Active tab: id=${tab?.id}, url=${tab?.url?.slice(0, 50)}`);
-
-    if (!tab?.id) {
-      throw new Error('タブが見つかりません');
+    if (!tab?.id) throw new Error('タブが見つかりません');
+    try {
+      return await ensureContentScriptAndSendMessage(tab.id, { type: 'TRANSLATE_PAGE' });
+    } catch (err) {
+      if (err instanceof InjectorError) throw new Error(err.message);
+      throw err;
     }
-
-    const message: TranslatePageMessage = { type: 'TRANSLATE_PAGE' };
-    log('info', 'Sending TRANSLATE_PAGE to content script...');
-
-    const response = await ensureContentScriptAndSendMessage(tab.id, message);
-
-    log('info', `Response: ${JSON.stringify(response)}`);
-
-    if (response.success) {
-      statusDiv.textContent = '翻訳完了!';
-      statusDiv.className = 'status success';
-    } else {
-      throw new Error(response.error || '翻訳に失敗しました');
-    }
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : '不明なエラー';
-    log('error', msg);
-    statusDiv.textContent = `エラー: ${msg}`;
-    statusDiv.className = 'status error';
-  } finally {
-    translateBtn.disabled = false;
-  }
+  },
+  setTimer: (ms, cb): TimerHandle => window.setTimeout(cb, ms) as unknown as TimerHandle,
+  clearTimer: (handle) => window.clearTimeout(handle as unknown as number),
+  now: () => Date.now(),
 });
 
-// Listen for model download progress from background/offscreen
-runtime.onMessage.addListener((message: ModelStatusMessage) => {
-  if (message.type !== 'OFFSCREEN_MODEL_STATUS') return;
+translateBtn.addEventListener('click', () => {
+  log('info', `Translate clicked (provider: ${providerSelect.value})`);
+  void controller.start();
+});
 
-  if (message.status === 'loading' && message.progress) {
-    const pct = Math.round(message.progress.progress);
-    log('info', `DL ${message.progress.file}: ${pct}%`);
-    statusDiv.textContent = `${LOCAL_LLM_MODEL} DL中... ${pct}%`;
-    statusDiv.className = 'status loading';
-  } else if (message.status === 'loading') {
-    log('info', 'Model loading...');
-    statusDiv.textContent = `${LOCAL_LLM_MODEL} 準備中...`;
-    statusDiv.className = 'status loading';
-  } else if (message.status === 'ready') {
-    log('info', 'Model ready');
-  } else if (message.status === 'error') {
-    log('error', `Model error: ${message.progress?.file ?? 'unknown'}`);
+// Bridge runtime messages (progress / complete / failed) to the controller.
+runtime.onMessage.addListener((message: unknown) => {
+  if (!message || typeof message !== 'object' || !('type' in message)) return;
+  const type = (message as { type: string }).type;
+
+  if (
+    type === 'TRANSLATION_PROGRESS' ||
+    type === 'TRANSLATION_COMPLETE' ||
+    type === 'TRANSLATION_FAILED'
+  ) {
+    controller.handleMessage(message);
+    return;
+  }
+
+  if (type === 'OFFSCREEN_MODEL_STATUS') {
+    const m = message as ModelStatusMessage;
+    if (m.status === 'loading' && m.progress) {
+      const pct = Math.round(m.progress.progress);
+      log('info', `DL ${m.progress.file}: ${pct}%`);
+    } else if (m.status === 'loading') {
+      log('info', 'Model loading...');
+    } else if (m.status === 'ready') {
+      log('info', 'Model ready');
+    } else if (m.status === 'error') {
+      log('error', `Model error: ${m.progress?.file ?? 'unknown'}`);
+    }
   }
 });
