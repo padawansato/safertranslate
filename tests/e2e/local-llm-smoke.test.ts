@@ -56,19 +56,36 @@ test('MyMemory API translation works in Chrome', async () => {
   await page.bringToFront();
   await page.waitForTimeout(200);
 
-  // Default provider is mymemory
+  // Default provider is mymemory. Under the new protocol the content
+  // script acks immediately with TRANSLATION_STARTED and streams
+  // progress via runtime.sendMessage — so we wait for TRANSLATION_COMPLETE
+  // inside the helper before closing it.
   await helper.evaluate(async () => {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     console.log('Active tab:', activeTab?.id, activeTab?.url);
-    if (activeTab?.id) {
-      const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'TRANSLATE_PAGE' });
-      console.log('Translation response:', JSON.stringify(response));
-    }
+    if (!activeTab?.id) return;
+
+    const completed = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('TRANSLATION_COMPLETE timeout')), 55000);
+      const onMessage = (msg: { type?: string }): void => {
+        if (msg?.type === 'TRANSLATION_COMPLETE' || msg?.type === 'TRANSLATION_FAILED') {
+          clearTimeout(timer);
+          chrome.runtime.onMessage.removeListener(onMessage);
+          resolve();
+        }
+      };
+      chrome.runtime.onMessage.addListener(onMessage);
+    });
+
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'TRANSLATE_PAGE' });
+    console.log('Translation ack:', JSON.stringify(response));
+    await completed;
+    console.log('Translation complete received');
   });
   await helper.close();
 
-  // Wait for translation boxes
-  await page.waitForSelector('.safertranslate-box', { timeout: 30000 });
+  // Boxes should already be present; short timeout is enough.
+  await page.waitForSelector('.safertranslate-box', { timeout: 5000 });
   const boxCount = await page.locator('.safertranslate-box').count();
   console.log('Translation boxes:', boxCount);
   expect(boxCount).toBeGreaterThan(0);

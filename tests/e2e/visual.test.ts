@@ -73,17 +73,32 @@ test('page after translation with bilingual display', async () => {
   await page.bringToFront();
   await page.waitForTimeout(200);
 
+  // New async protocol: content script acks immediately and streams
+  // progress via runtime.sendMessage. Wait for TRANSLATION_COMPLETE
+  // inside the helper before closing it so visual diff sees the final DOM.
   await helper.evaluate(async () => {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab?.id) {
-      await chrome.tabs.sendMessage(activeTab.id, { type: 'TRANSLATE_PAGE' });
-    }
+    if (!activeTab?.id) return;
+
+    const completed = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('TRANSLATION_COMPLETE timeout')), 55000);
+      const onMessage = (msg: { type?: string }): void => {
+        if (msg?.type === 'TRANSLATION_COMPLETE' || msg?.type === 'TRANSLATION_FAILED') {
+          clearTimeout(timer);
+          chrome.runtime.onMessage.removeListener(onMessage);
+          resolve();
+        }
+      };
+      chrome.runtime.onMessage.addListener(onMessage);
+    });
+
+    await chrome.tabs.sendMessage(activeTab.id, { type: 'TRANSLATE_PAGE' });
+    await completed;
   });
   await helper.close();
 
-  // Wait for translation boxes to appear and all batches to finish
-  await page.waitForSelector('.safertranslate-box', { timeout: 30000 });
-  await page.waitForTimeout(3000);
+  // Boxes should already be present; short selector wait just for stability.
+  await page.waitForSelector('.safertranslate-box', { timeout: 5000 });
 
   await expect(page).toHaveScreenshot('page-after-translation.png', {
     maxDiffPixelRatio: 0.02,
