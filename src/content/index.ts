@@ -3,89 +3,143 @@
  * Injected into web pages to handle translation
  */
 
-import type { ExtensionMessage } from '@/services/types';
+import type {
+  ExtensionMessage,
+  TranslationStartedMessage,
+  TranslationStartFailedMessage,
+  TranslationProgressMessage,
+  TranslationCompleteMessage,
+  TranslationFailedMessage,
+} from '@/services/types';
 import { translate } from '@/services/translator';
 import { extractTranslatableElements } from './textExtractor';
 import { injectTranslation, removeAllTranslations, hasTranslations } from './domInjector';
 import { runtime } from '@/lib/browser';
 import './styles.css';
 
+const BATCH_SIZE = 5;
+const BATCH_DELAY_MS = 200;
+
 /**
- * Listen for messages from popup/background
+ * Listen for messages from popup/background.
+ *
+ * For TRANSLATE_PAGE, we respond IMMEDIATELY (via sendResponse) with a
+ * TRANSLATION_STARTED ack that includes the element count. The actual
+ * translation runs asynchronously afterwards and emits progress via
+ * runtime.sendMessage so the popup can track per-batch progress instead
+ * of waiting for the entire page to finish.
  */
 runtime.onMessage.addListener(
   (message: ExtensionMessage, _sender, sendResponse) => {
-    if (message.type === 'TRANSLATE_PAGE') {
-      handleTranslatePage()
-        .then(() => sendResponse({ success: true }))
-        .catch((error) => {
-          console.error('[SaferTranslate] Translation error:', error);
-          sendResponse({ success: false, error: String(error) });
-        });
-      return true; // Keep channel open for async sendResponse
+    if (message.type !== 'TRANSLATE_PAGE') return false;
+
+    try {
+      if (hasTranslations()) {
+        console.log('[SaferTranslate] Removing existing translations');
+        removeAllTranslations();
+        const ack: TranslationStartedMessage = { type: 'TRANSLATION_STARTED', total: 0 };
+        sendResponse(ack);
+        // Emit a synthetic "complete" so the popup can close out its state.
+        const complete: TranslationCompleteMessage = {
+          type: 'TRANSLATION_COMPLETE',
+          translatedCount: 0,
+          elapsedMs: 0,
+        };
+        void runtime.sendMessage(complete);
+        return false;
+      }
+
+      const elements = extractTranslatableElements();
+      console.log(`[SaferTranslate] Found ${elements.length} elements to translate`);
+
+      const ack: TranslationStartedMessage = {
+        type: 'TRANSLATION_STARTED',
+        total: elements.length,
+      };
+      sendResponse(ack);
+
+      // Kick off async translation. Errors are caught inside the runner and
+      // reported via runtime.sendMessage(TRANSLATION_FAILED).
+      void runTranslation(elements);
+    } catch (error) {
+      const startFailed: TranslationStartFailedMessage = {
+        type: 'TRANSLATION_START_FAILED',
+        error: String(error),
+      };
+      sendResponse(startFailed);
     }
+
+    // Sync response — no async response promised, no need to keep channel open.
     return false;
-  }
+  },
 );
 
 /**
- * Handle page translation request
+ * Run the translation loop and emit progress/complete/failed events.
+ * Any per-element errors are swallowed and the loop continues; only a
+ * fatal error (e.g., the entire pipeline rejecting) triggers FAILED.
  */
-async function handleTranslatePage(): Promise<void> {
-  console.log('[SaferTranslate] Translation requested');
-
-  // Toggle: if translations exist, remove them
-  if (hasTranslations()) {
-    console.log('[SaferTranslate] Removing existing translations');
-    removeAllTranslations();
-    return;
-  }
-
-  // Extract translatable elements
-  const elements = extractTranslatableElements();
-  console.log(`[SaferTranslate] Found ${elements.length} elements to translate`);
-
-  if (elements.length === 0) {
-    console.log('[SaferTranslate] No translatable elements found');
-    return;
-  }
-
-  // Translate each element
-  // Note: Using sequential translation with small batches to avoid rate limiting
-  const BATCH_SIZE = 5;
+async function runTranslation(elements: { element: HTMLElement; text: string }[]): Promise<void> {
+  const startedAt = Date.now();
+  let done = 0;
   let translatedCount = 0;
+  const total = elements.length;
 
-  for (let i = 0; i < elements.length; i += BATCH_SIZE) {
-    const batch = elements.slice(i, i + BATCH_SIZE);
+  // Immediately emit a zero-progress tick so the popup knows work has begun
+  // even before the first batch completes (e.g. during model download).
+  emitProgress(0, total, 'translate');
 
-    await Promise.all(
-      batch.map(async ({ element, text }) => {
-        try {
-          const result = await translate(text);
-
-          if (result.translatedText && result.translatedText !== text) {
-            injectTranslation(element, result.translatedText);
-            translatedCount++;
+  try {
+    for (let i = 0; i < elements.length; i += BATCH_SIZE) {
+      const batch = elements.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(async ({ element, text }) => {
+          try {
+            const result = await translate(text);
+            if (result.translatedText && result.translatedText !== text) {
+              injectTranslation(element, result.translatedText);
+              translatedCount++;
+            }
+          } catch (error) {
+            console.warn('[SaferTranslate] Failed to translate element:', error);
           }
-        } catch (error) {
-          console.warn('[SaferTranslate] Failed to translate element:', error);
-          // Continue with other elements even if one fails
-        }
-      })
-    );
+        }),
+      );
+      done += batch.length;
+      emitProgress(done, total, 'translate');
 
-    // Small delay between batches to be nice to the API
-    if (i + BATCH_SIZE < elements.length) {
-      await delay(200);
+      if (i + BATCH_SIZE < elements.length) {
+        await delay(BATCH_DELAY_MS);
+      }
     }
-  }
 
-  console.log(`[SaferTranslate] Translated ${translatedCount} elements`);
+    const complete: TranslationCompleteMessage = {
+      type: 'TRANSLATION_COMPLETE',
+      translatedCount,
+      elapsedMs: Date.now() - startedAt,
+    };
+    void runtime.sendMessage(complete);
+    console.log(`[SaferTranslate] Translated ${translatedCount} / ${total} elements`);
+  } catch (error) {
+    const failed: TranslationFailedMessage = {
+      type: 'TRANSLATION_FAILED',
+      error: error instanceof Error ? error.message : String(error),
+      phase: 'translate',
+    };
+    void runtime.sendMessage(failed);
+  }
 }
 
-/**
- * Utility function for delay
- */
+function emitProgress(done: number, total: number, phase: 'model' | 'translate'): void {
+  const progress: TranslationProgressMessage = {
+    type: 'TRANSLATION_PROGRESS',
+    done,
+    total,
+    phase,
+  };
+  void runtime.sendMessage(progress);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
