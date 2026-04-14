@@ -7,7 +7,7 @@
  * It ensures the `setup` callback runs exactly once per guard key per window.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { runOnceInContentScript } from '@/lib/singletonContentScript';
 
 function clearGuard(key: string): void {
@@ -17,9 +17,21 @@ function clearGuard(key: string): void {
 
 describe('runOnceInContentScript', () => {
   const key = '__test_guard_v1';
+  // Initialized in beforeEach. MockInstance's default generics
+  // (any[], any) are loose but adequate for test-side assertions on
+  // call count and the first argument.
+  let warnSpy!: MockInstance;
 
   beforeEach(() => {
     clearGuard(key);
+    // Silence the duplicate-injection warning by default so it doesn't
+    // pollute stderr during tests that don't assert on it. Tests that
+    // care about warn behavior assert against this same spy.
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { /* silence */ });
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
   });
 
   it('runs the setup callback on first call', () => {
@@ -78,5 +90,22 @@ describe('runOnceInContentScript', () => {
     const setup2 = vi.fn();
     runOnceInContentScript(key, setup2);
     expect(setup2).not.toHaveBeenCalled();
+  });
+
+  it('warns on a duplicate call so devs can notice re-injection (#10)', () => {
+    runOnceInContentScript(key, () => { /* first */ });
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    runOnceInContentScript(key, () => { /* second */ });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const firstCallArgs = warnSpy.mock.calls[0] ?? [];
+    const firstArg = String(firstCallArgs[0] ?? '');
+    expect(firstArg).toContain(key);
+    expect(firstArg).toMatch(/duplicate|re-injection/i);
+  });
+
+  it('does NOT warn on the first call', () => {
+    runOnceInContentScript(key, () => { /* first */ });
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
