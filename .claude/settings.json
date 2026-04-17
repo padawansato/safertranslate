@@ -3,7 +3,8 @@
     "allow": [],
     "deny": [
       "Read(.env)",
-      "Read(.mcp.json)"
+      "Read(.mcp.json)",
+      "Bash(rm)"
     ]
   },
   "hooks": {
