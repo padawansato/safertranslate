@@ -17,7 +17,16 @@
 export function runOnceInContentScript(guardKey: string, setup: () => void): void {
   const w = window as unknown as Record<string, unknown>;
 
-  if (w[guardKey]) return;
+  if (w[guardKey]) {
+    // Not an error — the guard did its job — but surface a warning so
+    // developers notice re-injection during local testing. In production
+    // the message is harmless noise in the console; in development it's
+    // the breadcrumb that pointed #8 at its root cause.
+    console.warn(
+      `[SaferTranslate] duplicate content script injection detected (key=${guardKey})`,
+    );
+    return;
+  }
 
   // Set the flag *before* running setup so a throwing setup does not
   // cause an infinite retry loop on the next re-injection. The caller
