@@ -14,7 +14,8 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 - `npm run build` - 本番ビルド
 - `npm run test` - Unit tests (watch mode)
 - `npm run test:run` - Unit tests (single run)
-- `npm run test:e2e` - E2E tests
+- `npm run test:e2e` - E2E tests (Chrome, Playwright)
+- `npm run test:safari` - Safari 拡張 E2E（macOS ローカル専用、詳細は rules/safari-messaging.md）
 - `npm run typecheck` - 型チェック
 - `npm run lint` - ESLint実行（手動）
 

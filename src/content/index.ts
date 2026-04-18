@@ -16,10 +16,54 @@ import { extractTranslatableElements } from './textExtractor';
 import { injectTranslation, removeAllTranslations, hasTranslations } from './domInjector';
 import { runtime } from '@/lib/browser';
 import { runOnceInContentScript } from '@/lib/singletonContentScript';
+import { setupE2EHooks } from './e2e-hooks';
 import './styles.css';
 
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 200;
+
+type SendResponseFn = (response: ExtensionMessage) => void;
+
+/**
+ * Core TRANSLATE_PAGE handler, shared by the runtime message listener and
+ * the E2E hooks. The second-click "remove translations" behavior and the
+ * immediate TRANSLATION_STARTED ack both live here so hooks get identical
+ * semantics to a popup click.
+ */
+function handleTranslatePage(sendResponse: SendResponseFn): void {
+  try {
+    if (hasTranslations()) {
+      console.log('[SaferTranslate] Removing existing translations');
+      removeAllTranslations();
+      const ack: TranslationStartedMessage = { type: 'TRANSLATION_STARTED', total: 0 };
+      sendResponse(ack);
+      const complete: TranslationCompleteMessage = {
+        type: 'TRANSLATION_COMPLETE',
+        translatedCount: 0,
+        elapsedMs: 0,
+      };
+      void runtime.sendMessage(complete);
+      return;
+    }
+
+    const elements = extractTranslatableElements();
+    console.log(`[SaferTranslate] Found ${elements.length} elements to translate`);
+
+    const ack: TranslationStartedMessage = {
+      type: 'TRANSLATION_STARTED',
+      total: elements.length,
+    };
+    sendResponse(ack);
+
+    void runTranslation(elements);
+  } catch (error) {
+    const startFailed: TranslationStartFailedMessage = {
+      type: 'TRANSLATION_START_FAILED',
+      error: String(error),
+    };
+    sendResponse(startFailed);
+  }
+}
 
 /**
  * Listen for messages from popup/background.
@@ -38,44 +82,18 @@ runOnceInContentScript('__safertranslate_listener_v1', () => {
     (message: ExtensionMessage, _sender, sendResponse) => {
       if (message.type !== 'TRANSLATE_PAGE') return false;
 
-      try {
-        if (hasTranslations()) {
-          console.log('[SaferTranslate] Removing existing translations');
-          removeAllTranslations();
-          const ack: TranslationStartedMessage = { type: 'TRANSLATION_STARTED', total: 0 };
-          sendResponse(ack);
-          const complete: TranslationCompleteMessage = {
-            type: 'TRANSLATION_COMPLETE',
-            translatedCount: 0,
-            elapsedMs: 0,
-          };
-          void runtime.sendMessage(complete);
-          return true;
-        }
-
-        const elements = extractTranslatableElements();
-        console.log(`[SaferTranslate] Found ${elements.length} elements to translate`);
-
-        const ack: TranslationStartedMessage = {
-          type: 'TRANSLATION_STARTED',
-          total: elements.length,
-        };
-        sendResponse(ack);
-
-        void runTranslation(elements);
-      } catch (error) {
-        const startFailed: TranslationStartFailedMessage = {
-          type: 'TRANSLATION_START_FAILED',
-          error: String(error),
-        };
-        sendResponse(startFailed);
-      }
+      handleTranslatePage(sendResponse);
 
       // return true — see rules/safari-messaging.md. Safari 17 drops
       // sync sendResponse when a listener returns false.
       return true;
     },
   );
+
+  // E2E hooks: URL query flag + window.postMessage. sendResponse is a no-op
+  // since there's no message-channel caller in these cases; progress still
+  // flows through runtime.sendMessage as normal.
+  setupE2EHooks(window, () => handleTranslatePage(() => { /* no-op */ }));
 });
 
 /**
