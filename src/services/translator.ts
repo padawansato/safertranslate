@@ -7,10 +7,12 @@ import type { TranslationRequest, TranslationResponse, TranslationProviderType }
 import { getProvider } from './settings';
 import { myMemoryProvider } from './providers/mymemory';
 import { localLlmProvider } from './providers/local-llm';
+import { testStubProvider } from './providers/test-stub';
 
 const providers = {
   'mymemory': myMemoryProvider,
   'local-llm': localLlmProvider,
+  'test-stub': testStubProvider,
 } as const;
 
 function getProviderInstance(name: TranslationProviderType) {

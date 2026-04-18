@@ -22,7 +22,7 @@ export interface TranslationError {
 /**
  * Translation provider
  */
-export type TranslationProviderType = 'mymemory' | 'local-llm';
+export type TranslationProviderType = 'mymemory' | 'local-llm' | 'test-stub';
 
 export interface TranslationProvider {
   readonly name: TranslationProviderType;
