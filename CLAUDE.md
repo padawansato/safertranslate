@@ -119,6 +119,12 @@ pluginkit -e use -i com.padawansato.SaferTranslate.Extension
 - 無料、APIキー不要
 - レート制限: 1000語/日（匿名）
 
+### test-stub provider
+
+- CI / 高速イテレーション用。ネットワークもモデル DL も使わない。
+- 有効化: `chrome.storage.local.set({ settings: { provider: 'test-stub' } })`（popup dropdown には出していない）
+- 固定辞書 (`src/services/providers/test-stub.ts`) にない入力は `[stub] <text>` を返すので、「stub が走ったか他 provider が silent に通ったか」がテストで区別できる。
+
 ## Git運用
 
 - MVP期: main直接開発
