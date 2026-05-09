@@ -1,69 +1,80 @@
 # SaferTranslate
 
-バイリンガル表示に対応したシンプルなChrome翻訳拡張機能
+Chrome / Safari 用のシンプルなバイリンガル翻訳拡張機能。原文の下に翻訳を表示する [immersivetranslate.com](https://immersivetranslate.com) インスパイア型 UI。
 
-> Inspired by [immersivetranslate.com](https://immersivetranslate.com)
+> Status: v0.3.0 — GitHub Release 配布段階（Chrome Web Store / Safari App Store 未公開）
 
-## Key Features
+## 特徴
 
-### Core Features
-
-- 翻訳：英語→日本語（MyMemory API使用）
-- Bilingual Display: 原文の下に翻訳ボックスを表示
-- トグル機能: 再クリックで翻訳を削除
+- **バイリンガル表示** — 原文の下に翻訳ボックスを追加表示
+- **トグル翻訳** — 拡張アイコン再クリックで翻訳を削除
+- **複数の翻訳プロバイダ**
+  - MyMemory API（無料・APIキー不要、匿名 1000 語/日）
+  - ローカル LLM（Transformers.js + MarianMT、ネットワーク不要）
+  - test-stub（CI / 開発用）
+- **Chrome + Safari 対応** — Manifest V3 ベース、両ブラウザで同じコードベース
 
 ## インストール
 
-```bash
-# 依存関係のインストール
-npm install
+### 方法 A: GitHub Release から zip をダウンロード（推奨）
 
-# ビルド
-npm run build
+[Releases](https://github.com/padawansato/safertranslate/releases) から最新版を取得。
+
+#### Chrome
+
+1. `safertranslate-vX.Y.Z-chrome.zip` をダウンロード・展開
+2. `chrome://extensions` を開く → 「デベロッパーモード」を ON
+3. 「パッケージ化されていない拡張機能を読み込む」 → 展開したフォルダを選択
+
+#### Safari (macOS)
+
+1. `safertranslate-vX.Y.Z-safari.zip` をダウンロード・展開
+2. 展開した `SaferTranslate.app` を `/Applications/` に移動
+3. 未署名 `.app` のため Gatekeeper 警告が出ます。以下で隔離属性を解除:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/SaferTranslate.app
+   ```
+4. `SaferTranslate.app` を一度だけ起動（Safari に拡張を登録するため）
+5. Safari → 設定 → 詳細 →「メニューバーに開発メニューを表示」を ON
+6. Safari → 開発メニュー →「未署名の機能拡張を許可」を ON
+7. Safari → 設定 → 機能拡張 → SaferTranslate を ON
+
+> **制約**: Safari を再起動するたびに「未署名の機能拡張を許可」が無効化されるため、6 を再実行する必要があります（Apple の仕様）
+
+### 方法 B: ソースからビルド
+
+```bash
+git clone https://github.com/padawansato/safertranslate.git
+cd safertranslate
+npm install
+npm run build           # Chrome 用
+npm run build:safari    # Safari 用 (macOS のみ)
 ```
 
-### Chrome拡張機能としてロード
-
-1. Chrome で `chrome://extensions` を開く
-2. 「デベロッパーモード」をONにする
-3. 「パッケージ化されていない拡張機能を読み込む」をクリック
-4. `dist` フォルダを選択
+Safari の Xcode プロジェクト生成・ビルドは [CLAUDE.md](CLAUDE.md) を参照。
 
 ## 使い方
 
-1. 翻訳したいページを開く
-2. SaferTranslateアイコンをクリック
+1. 翻訳したい英語ページを開く
+2. SaferTranslate アイコンをクリック
 3. 「Translate Page」ボタンをクリック
 4. 再度クリックすると翻訳を削除
+
+ポップアップから翻訳プロバイダ（MyMemory / Local LLM）を切替可能。
 
 ## 開発
 
 ```bash
-# 開発モード（ファイル変更を監視）
-npm run dev
-
-# ユニットテスト
-npm run test
-
-# E2Eテスト
-npm run test:e2e
-
-# 型チェック
-npm run typecheck
-```
-
-## デバッグ方法
-
-### 拡張機能のロードと動作確認
-
-```bash
-# 1. ビルド
-npm run build
-
-# 2. Chrome で chrome://extensions を開く
-# 3. 「デベロッパーモード」ON
-# 4. 「パッケージ化されていない拡張機能を読み込む」→ dist/ を選択
-# 5. 任意の英語ページで拡張機能アイコンをクリック
+npm run dev              # 開発モード (watch)
+npm run test             # Unit tests (watch mode)
+npm run test:run         # Unit tests (single run)
+npm run test:e2e         # E2E (Chrome, Playwright)
+npm run test:safari      # E2E (Safari, macOS only)
+npm run typecheck        # 型チェック
+npm run lint             # ESLint
+npm run package:chrome   # Chrome 配布 zip を releases/ に生成
+npm run package:safari   # Safari .app zip を releases/ に生成
+npm run package          # 両方生成
 ```
 
 ### DevTools でのデバッグ
@@ -71,47 +82,33 @@ npm run build
 | 対象 | 開き方 |
 |------|--------|
 | Content Script | ページで F12 → Console |
-| Popup | 拡張機能アイコン右クリック → 「ポップアップを検証」 |
-| Service Worker | chrome://extensions → 拡張機能の「Service Worker」リンク |
-
-### Console出力の確認
-
-```
-[SaferTranslate] Content script loaded  ← Content Script読み込み成功
-[SaferTranslate] Translating X elements ← 翻訳処理開始
-```
+| Popup | 拡張機能アイコン右クリック →「ポップアップを検証」 |
+| Service Worker (Chrome) | `chrome://extensions` → 拡張機能の「Service Worker」リンク |
+| Web Inspector (Safari) | Safari → 開発メニュー → Web Inspector |
 
 ### よくある問題
 
 | 症状 | 確認ポイント |
 |------|-------------|
-| 翻訳ボックスが出ない | Console でエラー確認、APIレート制限の可能性 |
+| 翻訳ボックスが出ない | Console でエラー確認、API レート制限の可能性 |
 | アイコンクリックで反応なし | Service Worker が Inactive なら拡張機能を再読み込み |
-| スタイルが崩れる | `dist/assets/*.css` が存在するか確認 |
-
-### テスト実行
-
-```bash
-npm run test        # Unit tests (watch mode)
-npm run test:run    # Unit tests (単発)
-npm run test:e2e    # E2E tests (ブラウザが開く)
-npm run typecheck   # 型チェックのみ
-```
+| Safari でアイコンが反応しない | 設定で拡張が ON か、再起動後に「未署名拡張を許可」を再有効化したか |
+| ローカル LLM のロードが遅い | 初回はモデル DL（数百 MB）。2 回目以降はキャッシュ |
 
 ## 技術スタック
 
-- TypeScript
+- TypeScript (strict mode)
 - Vite + @crxjs/vite-plugin
 - Chrome Extension Manifest V3
+- Transformers.js v3 (Local LLM, MarianMT / m2m100)
 - Vitest (Unit Tests)
-- Playwright (E2E Tests)
+- Playwright (E2E Tests, Chrome / Safari)
+- ESLint 9.x + typescript-eslint (custom rule: `no-onmessage-return-false`)
 
-## Future Plans
+## Roadmap
 
-- 翻訳サービスの選択
-- 埋め込みデザインの選択
-- ショートカットキー対応
+公開準備の進捗は [docs/ROADMAP.md](docs/ROADMAP.md) を参照。
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.
