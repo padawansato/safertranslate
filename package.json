@@ -1,6 +1,6 @@
 {
   "name": "safertranslate",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Chrome translation extension with bilingual display (immersivetranslate.com style)",
   "type": "module",
   "author": "padawansato",
@@ -23,7 +23,10 @@
     "safari:convert": "xcrun safari-web-extension-converter ./dist-safari --project-location ./safari-extension --app-name SaferTranslate --bundle-identifier com.padawansato.SaferTranslate --no-prompt --macos-only",
     "safari:build": "xcodebuild -project ./safari-extension/SaferTranslate/SaferTranslate.xcodeproj -scheme SaferTranslate -configuration Debug build",
     "test:safari": "bash scripts/safari-e2e.sh",
-    "test:visual:update": "docker run --rm -v $(pwd):/work -w /work mcr.microsoft.com/playwright:v1.57.0-noble bash -c 'npm ci && npm run build && xvfb-run npx playwright test tests/e2e/visual.test.ts --update-snapshots'"
+    "test:visual:update": "docker run --rm -v $(pwd):/work -w /work mcr.microsoft.com/playwright:v1.57.0-noble bash -c 'npm ci && npm run build && xvfb-run npx playwright test tests/e2e/visual.test.ts --update-snapshots'",
+    "package:chrome": "node scripts/package-chrome.mjs",
+    "package:safari": "node scripts/package-safari.mjs",
+    "package": "npm run package:chrome && npm run package:safari"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",
