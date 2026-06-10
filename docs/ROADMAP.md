@@ -21,6 +21,16 @@
 - PostToolUse: ESLint自動実行（Edit/Write後）
 - PreToolUse: ファイル保護（package-lock.json, .env, dist/）
 
+**v0.3.0 Safari 対応 + ローカル LLM** ✅ (2026-05-09)
+
+- Safari 拡張対応（Manifest V3, Safari 16.4+）— **Phase 4 を前倒しで完了**
+- ローカル LLM 翻訳（Transformers.js v3, `Xenova/opus-mt-en-jap`, オフライン動作）
+- test-stub provider（CI / 高速イテレーション用）
+- GitHub Release 配布（Chrome zip + Safari .app zip）
+- Safari E2E 自動化（`npm run test:safari`）、ESLint カスタムルール `no-onmessage-return-false`
+
+**次の目標**: Phase 2（公開準備）→ Phase 3（Chrome Web Store 公開）
+
 ---
 
 ## Phase 1: 地盤固め（テストで機能を保護しながら）
@@ -95,16 +105,16 @@
 
 ### 2.1 公開必須素材
 
-- [ ] プライバシーポリシー（docs/privacy-policy.md）
-- [ ] 説明文（日本語・英語）
-- [ ] スクリーンショット 1280x800 (3-5枚)
+- [x] プライバシーポリシー（[docs/privacy-policy.md](privacy-policy.md)）
+- [x] 説明文（日本語・英語）（[docs/store-listing.md](store-listing.md)）
+- [ ] スクリーンショット 1280x800 (3-5枚)（構成案は store-listing.md 参照）
 
 ### 2.2 manifest.json 公開対応
 
-- [ ] `description` を英語で記載
-- [ ] `homepage_url` 設定
-- [ ] `permissions` 最小化確認
-- [ ] `version` を "1.0.0" に
+- [x] `description` を英語で記載
+- [x] `homepage_url` 設定
+- [x] `permissions` 最小化確認（activeTab / scripting / storage / offscreen の 4 つとも実使用をコードで確認済み）
+- [ ] `version` を "1.0.0" に（ストア提出直前に実施）
 
 ### 2.3 品質確認
 
@@ -121,14 +131,14 @@
 
 ---
 
-## Phase 4: Safari拡張機能対応
+## Phase 4: Safari拡張機能対応 ✅ (v0.3.0 で完了)
 
 詳細は下部「技術検討: Safari拡張機能対応（個人利用）」を参照。
 
-- [ ] `webextension-polyfill` 追加
-- [ ] `safari-web-extension-converter` でXcodeプロジェクト変換
-- [ ] Safari実機テスト（主要サイトでの動作確認）
-- [ ] Safari向けセットアップ手順をREADMEに追記
+- [x] `webextension-polyfill` 追加 → 不採用。`src/lib/browser.ts` の薄い抽象で代替
+- [x] `safari-web-extension-converter` でXcodeプロジェクト変換（`npm run safari:convert`）
+- [x] Safari実機テスト（`npm run test:safari` で E2E 自動化 — #12）
+- [x] Safari向けセットアップ手順をREADMEに追記
 
 ---
 

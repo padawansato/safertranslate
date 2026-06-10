@@ -6,7 +6,7 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 
 ## ディレクトリ構成
 
-- `ROADMAP.md` - 開発ロードマップ
+- `docs/ROADMAP.md` - 開発ロードマップ
 
 ## コマンド
 
