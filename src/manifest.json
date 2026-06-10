@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "SaferTranslate",
   "version": "0.3.0",
-  "description": "Bilingual translation extension - shows original + Japanese translation side by side",
+  "description": "Privacy-friendly bilingual translation. Shows original and Japanese side by side. Optional on-device LLM keeps text local.",
+  "homepage_url": "https://github.com/padawansato/safertranslate",
   "icons": {
     "16": "src/icons/icon16.png",
     "48": "src/icons/icon48.png",
@@ -31,8 +32,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/index.ts"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/index.ts"
+      ],
       "run_at": "document_idle"
     }
   ]
