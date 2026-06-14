@@ -220,28 +220,33 @@ runtime.onMessage.addListener((message: unknown) => {
   }
 
   if (type === 'OFFSCREEN_MODEL_STATUS') {
-    const m = message as ModelStatusMessage;
-    if (m.status === 'loading' && m.progress) {
-      const pct = Math.round(m.progress.progress);
-      modelDownload = { file: m.progress.file, progress: pct };
-      // Model download IS forward progress: keep the heartbeat alive so a long
-      // first-run download isn't mistaken for a stall.
-      controller.notifyModelLoading();
-      // Dedup: only log when file or percent actually changes.
-      const key = `${m.progress.file}:${pct}`;
-      if (key !== lastDlLogKey) {
-        lastDlLogKey = key;
-        log('info', `DL ${m.progress.file}: ${pct}%`);
-      }
-    } else if (m.status === 'loading') {
-      controller.notifyModelLoading();
-      log('info', 'Model loading...');
-    } else if (m.status === 'ready') {
-      modelDownload = null;
-      log('info', 'Model ready');
-    } else if (m.status === 'error') {
-      modelDownload = null;
-      log('error', `Model error: ${m.progress?.file ?? 'unknown'}`);
-    }
+    handleModelStatus(message as ModelStatusMessage);
   }
 });
+
+/**
+ * Reflect first-run model download status in the popup: show "モデルDL中 X%",
+ * keep the controller heartbeat alive (a long download isn't a stall), and
+ * dedup the debug log so hundreds of identical progress ticks don't flood it.
+ */
+function handleModelStatus(m: ModelStatusMessage): void {
+  if (m.status === 'loading' && m.progress) {
+    const pct = Math.round(m.progress.progress);
+    modelDownload = { file: m.progress.file, progress: pct };
+    controller.notifyModelLoading();
+    const key = `${m.progress.file}:${pct}`;
+    if (key !== lastDlLogKey) {
+      lastDlLogKey = key;
+      log('info', `DL ${m.progress.file}: ${pct}%`);
+    }
+  } else if (m.status === 'loading') {
+    controller.notifyModelLoading();
+    log('info', 'Model loading...');
+  } else if (m.status === 'ready') {
+    modelDownload = null;
+    log('info', 'Model ready');
+  } else if (m.status === 'error') {
+    modelDownload = null;
+    log('error', `Model error: ${m.progress?.file ?? 'unknown'}`);
+  }
+}

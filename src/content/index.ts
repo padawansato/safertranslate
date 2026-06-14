@@ -168,12 +168,7 @@ async function runTranslation(elements: { element: HTMLElement; text: string }[]
     // Every element errored → the provider is broken, not "done with 0 results".
     // Surface it as a failure so the popup shows the real error.
     if (total > 0 && failedCount === total) {
-      const failed: TranslationFailedMessage = {
-        type: 'TRANSLATION_FAILED',
-        error: firstError ?? 'すべての要素で翻訳に失敗しました',
-        phase: 'translate',
-      };
-      void runtime.sendMessage(failed);
+      emitFailure(firstError ?? 'すべての要素で翻訳に失敗しました');
       console.error(`[SaferTranslate] All ${total} elements failed: ${firstError}`);
       return;
     }
@@ -186,13 +181,18 @@ async function runTranslation(elements: { element: HTMLElement; text: string }[]
     void runtime.sendMessage(complete);
     console.log(`[SaferTranslate] Translated ${translatedCount} / ${total} elements (${failedCount} failed)`);
   } catch (error) {
-    const failed: TranslationFailedMessage = {
-      type: 'TRANSLATION_FAILED',
-      error: describeError(error),
-      phase: 'translate',
-    };
-    void runtime.sendMessage(failed);
+    emitFailure(describeError(error));
   }
+}
+
+/** Emit a TRANSLATION_FAILED event for the translate phase. */
+function emitFailure(error: string): void {
+  const failed: TranslationFailedMessage = {
+    type: 'TRANSLATION_FAILED',
+    error,
+    phase: 'translate',
+  };
+  void runtime.sendMessage(failed);
 }
 
 function emitProgress(done: number, total: number, phase: 'model' | 'translate'): void {
