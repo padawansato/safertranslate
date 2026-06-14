@@ -39,8 +39,11 @@ test('popup initial state', async () => {
   await popup.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
   await popup.waitForLoadState('domcontentloaded');
 
+  // Mask the build-info line: it renders `Build: <timestamp>`, which changes on
+  // every build and would otherwise fail the diff on every run (false positive).
   await expect(popup).toHaveScreenshot('popup-initial.png', {
     maxDiffPixelRatio: 0.01,
+    mask: [popup.locator('#build-info')],
   });
 
   await popup.close();
