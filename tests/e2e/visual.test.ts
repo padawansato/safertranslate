@@ -39,11 +39,11 @@ test('popup initial state', async () => {
   await popup.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
   await popup.waitForLoadState('domcontentloaded');
 
-  // Mask the build-info line: it renders `Build: <timestamp>`, which changes on
-  // every build and would otherwise fail the diff on every run (false positive).
+  // The build-info line renders `Build: <timestamp>` (changes every build), but
+  // that one short strip stays well under maxDiffPixelRatio, so no masking is
+  // needed — keeping baselines identical across platforms (darwin/linux).
   await expect(popup).toHaveScreenshot('popup-initial.png', {
     maxDiffPixelRatio: 0.01,
-    mask: [popup.locator('#build-info')],
   });
 
   await popup.close();
