@@ -57,7 +57,7 @@ Chrome翻訳拡張機能（immersivetranslate.com風バイリンガル表示）
 ## Safari 拡張テスト手順
 
 1. `npm run build:safari` — dist-safari/ を生成
-2. `rm -rf safari-extension && npm run safari:convert` — Xcode プロジェクト生成
+2. `mv safari-extension ~/.Trash/safari-extension-$(date +%s) 2>/dev/null` → `npm run safari:convert` — 既存 `safari-extension/` を**ゴミ箱へ退避**してから Xcode プロジェクト生成（`rm` は使わない。converter は既存 dir があると失敗するため退避が必要）
 3. `npm run safari:build` — .app ビルド
 4. `open /Users/$(whoami)/Library/Developer/Xcode/DerivedData/SaferTranslate-*/Build/Products/Debug/SaferTranslate.app` — 拡張登録
 5. Safari 設定 → 機能拡張 → SaferTranslate を ON（初回のみ）
