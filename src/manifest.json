@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SaferTranslate",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bilingual translation extension - shows original + Japanese translation side by side",
   "icons": {
     "16": "src/icons/icon16.png",
