@@ -99,6 +99,9 @@ test('MyMemory API translation works in Chrome', async () => {
 });
 
 test('Local LLM translation works in Chrome', async () => {
+  // m2m100 (~475MB) downloads on first run; allow generous wall-clock.
+  test.setTimeout(200000);
+
   // Monitor service worker console
   const swWorkers = context.serviceWorkers();
   for (const sw of swWorkers) {
@@ -149,50 +152,45 @@ test('Local LLM translation works in Chrome', async () => {
   });
   console.log('SW check:', swLogs);
 
-  // Trigger translation
-  const helperResponse = await helper.evaluate(async () => {
+  // Trigger translation and wait for the REAL terminal event. The model
+  // (~475MB m2m100) downloads on first run, so allow a generous timeout.
+  // NOTE: a previous version asserted `expect(true).toBe(true)` here, which
+  // silently hid local-llm regressions (the test stayed "green" even when no
+  // translation boxes were produced). This test now fails if no boxes appear.
+  const outcome = await helper.evaluate(async () => {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     console.log('Active tab:', activeTab?.id, activeTab?.url);
-    if (activeTab?.id) {
-      try {
-        const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'TRANSLATE_PAGE' });
-        console.log('LLM Translation response:', JSON.stringify(response));
-        return response;
-      } catch (e) {
-        console.error('sendMessage error:', e);
-        return { error: String(e) };
-      }
-    }
-    return { error: 'no active tab' };
+    if (!activeTab?.id) return { error: 'no active tab' };
+
+    const terminal = new Promise<{ type: string }>((resolve) => {
+      const timer = setTimeout(() => resolve({ type: 'CLIENT_TIMEOUT' }), 150000);
+      const onMessage = (msg: { type?: string }): void => {
+        if (msg?.type === 'TRANSLATION_COMPLETE' || msg?.type === 'TRANSLATION_FAILED') {
+          clearTimeout(timer);
+          chrome.runtime.onMessage.removeListener(onMessage);
+          resolve({ type: msg.type });
+        }
+      };
+      chrome.runtime.onMessage.addListener(onMessage);
+    });
+
+    const ack = await chrome.tabs.sendMessage(activeTab.id, { type: 'TRANSLATE_PAGE' });
+    console.log('LLM Translation ack:', JSON.stringify(ack));
+    const result = await terminal;
+    console.log('LLM terminal:', JSON.stringify(result));
+    return { ack, result };
   });
-  console.log('Helper response:', helperResponse);
+  console.log('Outcome:', JSON.stringify(outcome));
   await helper.close();
 
-  // Wait a bit for any async translations
-  await page.waitForTimeout(10000);
-
-  // Dump ALL content script logs
-  const safertranslateLogs = logs.filter((l) => l.includes('SaferTranslate') || l.includes('error') || l.includes('Error') || l.includes('warn'));
-  console.log('=== Content Script Logs ===');
-  for (const l of safertranslateLogs) {
-    console.log(l);
-  }
-  console.log('=== All Logs ===');
-  for (const l of logs) {
-    console.log(l);
-  }
-
-  // Check if any translation boxes appeared
+  await page.waitForTimeout(500);
   const boxCount = await page.locator('.safertranslate-box').count();
   console.log('LLM Translation boxes:', boxCount);
+  expect(boxCount).toBeGreaterThan(0);
 
-  if (boxCount > 0) {
-    const firstBox = await page.locator('.safertranslate-box').first().textContent();
-    console.log('First LLM translation:', firstBox);
-  }
-
-  // For diagnosis: pass even if 0 boxes, we just want the logs
-  expect(true).toBe(true);
+  const firstBox = await page.locator('.safertranslate-box').first().textContent();
+  console.log('First LLM translation:', firstBox);
+  expect(firstBox).toBeTruthy();
 
   await page.close();
 });

@@ -5,6 +5,10 @@ import { sharedConfig } from './vite.config.shared';
 // Safari content script: must be self-contained IIFE (no ES module imports)
 export default defineConfig(
   mergeConfig(sharedConfig, {
+    // Override the shared default: this IS the Safari target.
+    define: {
+      __IS_SAFARI__: JSON.stringify(true),
+    },
     build: {
       outDir: 'dist-safari',
       emptyOutDir: false,

@@ -62,6 +62,16 @@ type IncomingMessage =
 export interface TranslateController {
   start(): Promise<void>;
   handleMessage(msg: unknown): void;
+  /**
+   * Re-arm the working heartbeat in response to model-download activity.
+   *
+   * A first-run local-llm translation blocks the first batch on a large model
+   * download (e.g. m2m100 ~475MB) which emits NO TRANSLATION_PROGRESS, so the
+   * heartbeat would otherwise fire a false "翻訳停滞" while the model is in
+   * fact downloading. This only resets the timer — it does NOT emit a state
+   * change (model-status messages arrive hundreds of times during a download).
+   */
+  notifyModelLoading(): void;
 }
 
 export function createTranslateController(deps: ControllerDeps): TranslateController {
@@ -182,6 +192,11 @@ export function createTranslateController(deps: ControllerDeps): TranslateContro
         moveToError(`${phase}: ${err}`);
         return;
       }
+    },
+
+    notifyModelLoading(): void {
+      if (getPhase() !== 'working') return;
+      armHeartbeat();
     },
   };
 }

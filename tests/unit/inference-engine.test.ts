@@ -42,14 +42,14 @@ describe('inference-engine', () => {
       expect(result).toBe('テスト翻訳');
     });
 
-    it('should call pipeline without src_lang/tgt_lang (OPUS-MT is en->ja pair-specific)', async () => {
+    it('should call pipeline with src_lang/tgt_lang (m2m100 is multilingual)', async () => {
       const { initInferenceEngine, handleTranslate } = await loadFreshModule();
       initInferenceEngine();
 
       await handleTranslate('Hello');
 
-      // OPUS-MT models are language-pair specific; no need for src_lang/tgt_lang
-      expect(mockTranslate).toHaveBeenCalledWith('Hello');
+      // m2m100 is multilingual and requires explicit language hints.
+      expect(mockTranslate).toHaveBeenCalledWith('Hello', { src_lang: 'en', tgt_lang: 'ja' });
     });
 
     it('should propagate errors from failed model load', async () => {
@@ -70,7 +70,7 @@ describe('inference-engine', () => {
 
       expect(mockPipelineFn).toHaveBeenCalledWith(
         'translation',
-        'Xenova/opus-mt-en-jap',
+        'Xenova/m2m100_418M',
         expect.objectContaining({ progress_callback: expect.any(Function) })
       );
     });

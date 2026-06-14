@@ -97,14 +97,41 @@ runOnceInContentScript('__safertranslate_listener_v1', () => {
 });
 
 /**
+ * Serialize an unknown thrown value into a human-readable string. Provider
+ * errors are often plain objects ({ code, message }) rather than Error
+ * instances, which `String(error)` renders as the useless "[object Object]".
+ */
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const obj = error as { message?: unknown; code?: unknown };
+    if (typeof obj.message === 'string') {
+      return typeof obj.code === 'string' ? `${obj.code}: ${obj.message}` : obj.message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
+/**
  * Run the translation loop and emit progress/complete/failed events.
- * Any per-element errors are swallowed and the loop continues; only a
- * fatal error (e.g., the entire pipeline rejecting) triggers FAILED.
+ *
+ * Per-element errors no longer vanish silently: each is logged with its full
+ * detail and counted. If EVERY element failed (a totally broken provider, e.g.
+ * the local-llm relay never reaching the model), we emit TRANSLATION_FAILED
+ * with the first real error instead of a deceptive "TRANSLATION_COMPLETE, 0
+ * translated" — which previously made a total failure look like success.
  */
 async function runTranslation(elements: { element: HTMLElement; text: string }[]): Promise<void> {
   const startedAt = Date.now();
   let done = 0;
   let translatedCount = 0;
+  let failedCount = 0;
+  let firstError: string | undefined;
   const total = elements.length;
 
   // Immediately emit a zero-progress tick so the popup knows work has begun
@@ -123,7 +150,10 @@ async function runTranslation(elements: { element: HTMLElement; text: string }[]
               translatedCount++;
             }
           } catch (error) {
-            console.warn('[SaferTranslate] Failed to translate element:', error);
+            failedCount++;
+            const detail = describeError(error);
+            if (firstError === undefined) firstError = detail;
+            console.warn('[SaferTranslate] Failed to translate element:', detail, error);
           }
         }),
       );
@@ -135,17 +165,30 @@ async function runTranslation(elements: { element: HTMLElement; text: string }[]
       }
     }
 
+    // Every element errored → the provider is broken, not "done with 0 results".
+    // Surface it as a failure so the popup shows the real error.
+    if (total > 0 && failedCount === total) {
+      const failed: TranslationFailedMessage = {
+        type: 'TRANSLATION_FAILED',
+        error: firstError ?? 'すべての要素で翻訳に失敗しました',
+        phase: 'translate',
+      };
+      void runtime.sendMessage(failed);
+      console.error(`[SaferTranslate] All ${total} elements failed: ${firstError}`);
+      return;
+    }
+
     const complete: TranslationCompleteMessage = {
       type: 'TRANSLATION_COMPLETE',
       translatedCount,
       elapsedMs: Date.now() - startedAt,
     };
     void runtime.sendMessage(complete);
-    console.log(`[SaferTranslate] Translated ${translatedCount} / ${total} elements`);
+    console.log(`[SaferTranslate] Translated ${translatedCount} / ${total} elements (${failedCount} failed)`);
   } catch (error) {
     const failed: TranslationFailedMessage = {
       type: 'TRANSLATION_FAILED',
-      error: error instanceof Error ? error.message : String(error),
+      error: describeError(error),
       phase: 'translate',
     };
     void runtime.sendMessage(failed);

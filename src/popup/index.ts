@@ -9,6 +9,7 @@ import type { TranslationProviderType } from '@/services/types';
 import { tabs, runtime } from '@/lib/browser';
 import { getSettings, saveSettings } from '@/services/settings';
 import { localLlmProvider } from '@/services/providers/local-llm';
+import { MODEL_ID as LOCAL_LLM_MODEL } from '@/services/inference-engine';
 import { initBuildInfo } from './buildInfo';
 import { ensureContentScriptAndSendMessage, InjectorError } from '@/lib/contentScriptInjector';
 import {
@@ -16,8 +17,6 @@ import {
   type ControllerState,
   type TimerHandle,
 } from './translateController';
-
-const LOCAL_LLM_MODEL = 'Xenova/opus-mt-en-jap';
 
 interface ModelStatusMessage {
   type: 'OFFSCREEN_MODEL_STATUS';
@@ -70,6 +69,17 @@ async function initProviderSelect(): Promise<void> {
   }
 
   providerSelect.value = settings.provider;
+
+  // Already on local-llm → warm the model cache now (background download) so the
+  // first "Translate" click isn't blocked on a multi-hundred-MB download.
+  if (settings.provider === 'local-llm') prefetchLocalLlmModel();
+}
+
+/** Ask the background SW to pre-download & cache the local-llm model. */
+function prefetchLocalLlmModel(): void {
+  void runtime.sendMessage({ type: 'PREFETCH_LOCAL_LLM' }).catch(() => {
+    /* SW asleep / no receiver — startup prefetch will cover it */
+  });
 }
 
 initProviderSelect();
@@ -80,6 +90,8 @@ providerSelect.addEventListener('change', async () => {
   if (provider === 'local-llm') {
     statusDiv.textContent = `ローカルLLM (${LOCAL_LLM_MODEL})\n初回はモデルDLが必要です`;
     statusDiv.className = 'status loading';
+    // Start the download immediately on selection, before the user clicks.
+    prefetchLocalLlmModel();
   } else {
     statusDiv.textContent = '翻訳エンジン: MyMemory API';
     statusDiv.className = 'status success';
@@ -90,6 +102,11 @@ providerSelect.addEventListener('change', async () => {
 
 let lastWorkingState: Extract<ControllerState, { phase: 'working' }> | null = null;
 let elapsedTickHandle: number | undefined;
+// Latest model-download progress, shown in the working status while the
+// first-run model downloads. Cleared once real translation progress arrives.
+let modelDownload: { file: string; progress: number } | null = null;
+// Dedup key so the debug log isn't flooded by hundreds of identical DL lines.
+let lastDlLogKey = '';
 
 function formatElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -112,7 +129,9 @@ function renderState(state: ControllerState): void {
       translateBtn.disabled = true;
       statusDiv.className = 'status loading';
       const elapsed = formatElapsed(Date.now() - state.startedAt);
-      if (state.total === 0) {
+      if (modelDownload) {
+        statusDiv.textContent = `モデルDL中 ${modelDownload.file}: ${modelDownload.progress}% — ${elapsed}`;
+      } else if (state.total === 0) {
         statusDiv.textContent = `翻訳対象なし — ${elapsed}`;
       } else {
         statusDiv.textContent = `翻訳中 (${state.done}/${state.total}) — ${elapsed}`;
@@ -178,6 +197,8 @@ const controller = createTranslateController({
 
 translateBtn.addEventListener('click', () => {
   log('info', `Translate clicked (provider: ${providerSelect.value})`);
+  modelDownload = null;
+  lastDlLogKey = '';
   void controller.start();
 });
 
@@ -191,6 +212,9 @@ runtime.onMessage.addListener((message: unknown) => {
     type === 'TRANSLATION_COMPLETE' ||
     type === 'TRANSLATION_FAILED'
   ) {
+    // Real translation progress means the model is loaded — stop showing
+    // download status.
+    if (type === 'TRANSLATION_PROGRESS') modelDownload = null;
     controller.handleMessage(message);
     return;
   }
@@ -199,12 +223,24 @@ runtime.onMessage.addListener((message: unknown) => {
     const m = message as ModelStatusMessage;
     if (m.status === 'loading' && m.progress) {
       const pct = Math.round(m.progress.progress);
-      log('info', `DL ${m.progress.file}: ${pct}%`);
+      modelDownload = { file: m.progress.file, progress: pct };
+      // Model download IS forward progress: keep the heartbeat alive so a long
+      // first-run download isn't mistaken for a stall.
+      controller.notifyModelLoading();
+      // Dedup: only log when file or percent actually changes.
+      const key = `${m.progress.file}:${pct}`;
+      if (key !== lastDlLogKey) {
+        lastDlLogKey = key;
+        log('info', `DL ${m.progress.file}: ${pct}%`);
+      }
     } else if (m.status === 'loading') {
+      controller.notifyModelLoading();
       log('info', 'Model loading...');
     } else if (m.status === 'ready') {
+      modelDownload = null;
       log('info', 'Model ready');
     } else if (m.status === 'error') {
+      modelDownload = null;
       log('error', `Model error: ${m.progress?.file ?? 'unknown'}`);
     }
   }

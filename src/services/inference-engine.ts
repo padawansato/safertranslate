@@ -12,11 +12,12 @@ if (typeof window === 'undefined' && typeof globalThis !== 'undefined') {
 // v3 types: use generic function type to avoid complex union issues
 type TranslationPipelineFn = (text: string, options?: Record<string, unknown>) => Promise<Array<{ translation_text: string }>>;
 
-// OPUS-MT en->ja model is much smaller (~150MB) than m2m100_418M (~475MB)
-// and loads significantly faster. Quality is lower but acceptable for testing
-// and most practical use cases. Being language-pair specific, it does not
-// require src_lang/tgt_lang parameters at inference time.
-export const MODEL_ID = 'Xenova/opus-mt-en-jap';
+// m2m100_418M (multilingual, q8) — chosen for en->ja quality. Smaller /
+// more-aggressively-quantized alternatives were evaluated and rejected (quality
+// or WASM-backend limits). The heavy first-run download is instead hidden by
+// PREFETCHING the model before first use (see src/background/index.ts).
+// Multilingual model → handleTranslate() passes src_lang/tgt_lang.
+export const MODEL_ID = 'Xenova/m2m100_418M';
 
 export type StatusChangeCallback = (
   status: 'loading' | 'ready' | 'error',
@@ -79,7 +80,8 @@ export async function getOrCreatePipeline(): Promise<TranslationPipelineFn> {
 
 export async function handleTranslate(text: string): Promise<string> {
   const pipe = await getOrCreatePipeline();
-  // OPUS-MT en->ja is language-pair specific; call with text only.
-  const result = await pipe(text);
+  // m2m100 is multilingual → pass explicit language hints. (Must stay in sync
+  // with MODEL_ID: a pair-specific model would be called with text only.)
+  const result = await pipe(text, { src_lang: 'en', tgt_lang: 'ja' });
   return (result as Array<{ translation_text: string }>)[0]?.translation_text ?? '';
 }

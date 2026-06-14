@@ -238,6 +238,43 @@ describe('translateController', () => {
     }
   });
 
+  it('notifyModelLoading re-arms the heartbeat without emitting a new state', async () => {
+    const ctx = makeDeps();
+    const controller = createTranslateController(ctx.deps);
+
+    const startPromise = controller.start();
+    ctx.resolveSend({ type: 'TRANSLATION_STARTED', total: 10 });
+    await startPromise;
+
+    const firstHeartbeat = [...ctx.pending.values()][0]!;
+    expect(firstHeartbeat.ms).toBe(HEARTBEAT_TIMEOUT_MS);
+    const stateCountBefore = ctx.states.length;
+
+    controller.notifyModelLoading();
+
+    // Old heartbeat cleared, a fresh one armed (so a long model download does
+    // not trip the stall timer)...
+    expect(ctx.pending.has(firstHeartbeat.id)).toBe(false);
+    expect(ctx.pending.size).toBe(1);
+    // ...but no state change is emitted (model-status fires hundreds of times).
+    expect(ctx.states.length).toBe(stateCountBefore);
+  });
+
+  it('notifyModelLoading is a no-op outside the working state', async () => {
+    const ctx = makeDeps();
+    const controller = createTranslateController(ctx.deps);
+
+    controller.start(); // reaching
+    const stateCountBefore = ctx.states.length;
+    const reachingTimer = [...ctx.pending.values()][0]!;
+
+    controller.notifyModelLoading();
+
+    // Reaching timer untouched, no new state.
+    expect(ctx.pending.has(reachingTimer.id)).toBe(true);
+    expect(ctx.states.length).toBe(stateCountBefore);
+  });
+
   it('ignores PROGRESS messages arriving before ack (idle/reaching state)', async () => {
     const ctx = makeDeps();
     const controller = createTranslateController(ctx.deps);

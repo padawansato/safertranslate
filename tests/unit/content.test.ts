@@ -157,6 +157,42 @@ describe('content script — message handling contract', () => {
     );
   });
 
+  it('emits TRANSLATION_FAILED (not a deceptive COMPLETE 0件) when every element fails', async () => {
+    const extractor = await import('@/content/textExtractor');
+    const fakeElements = Array.from({ length: 3 }, (_, i) => ({
+      element: document.createElement('p'),
+      text: `text ${i}`,
+    }));
+    vi.mocked(extractor.extractTranslatableElements).mockReturnValueOnce(fakeElements);
+
+    // Simulate a totally broken provider (e.g. local-llm relay never reaching
+    // the model). Provider errors are plain objects, not Error instances.
+    const translator = await import('@/services/translator');
+    vi.mocked(translator.translate).mockRejectedValue({
+      code: 'LOCAL_LLM_ERROR',
+      message: 'Could not establish connection. Receiving end does not exist.',
+    });
+
+    await loadContentScript();
+    const listener = getRegisteredListener();
+    listener({ type: 'TRANSLATE_PAGE' }, {}, vi.fn());
+
+    await vi.waitFor(() => {
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'TRANSLATION_FAILED',
+          error: 'LOCAL_LLM_ERROR: Could not establish connection. Receiving end does not exist.',
+          phase: 'translate',
+        }),
+      );
+    });
+
+    // It must NOT report a success-looking COMPLETE when nothing translated.
+    expect(chromeMock.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'TRANSLATION_COMPLETE' }),
+    );
+  });
+
   it('sends TRANSLATION_START_FAILED if element extraction throws', async () => {
     const extractor = await import('@/content/textExtractor');
     vi.mocked(extractor.extractTranslatableElements).mockImplementationOnce(() => {

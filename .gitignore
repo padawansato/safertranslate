@@ -52,6 +52,9 @@ build/tmp/
 *.crx
 *.pem
 
+# E2E: persistent Chrome profile that caches the downloaded local-llm model
+.e2e-chrome-profile/
+
 # Safari build & Xcode project
 dist-safari/
 safari-extension/

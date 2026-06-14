@@ -6,6 +6,10 @@ import { sharedConfig } from './vite.config.shared';
 // Content script is built separately via vite.config.safari-content.ts
 export default defineConfig(
   mergeConfig(sharedConfig, {
+    // Override the shared default: this IS the Safari target.
+    define: {
+      __IS_SAFARI__: JSON.stringify(true),
+    },
     build: {
       // Disable Vite's modulePreload helper so inference-engine.js does not
       // import __vitePreload from background.js — required for content script
